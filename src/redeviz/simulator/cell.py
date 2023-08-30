@@ -787,7 +787,7 @@ class CellMap(object):
         if is_fail:
             raise ValueError("Please check shape configure")
         logging.info("Simulating RNA points")
-        # self.RNA_point_simulation()
+        self.RNA_point_simulation()
 
     def write_dataset(self, f_dir):
         logging.info("Writting spatial dataset ...")
