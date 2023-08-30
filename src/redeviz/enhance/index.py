@@ -141,8 +141,7 @@ def compute_simu_info_worker(cnt_arr, norm_method, UMI_per_bin, mu_rand_arr, mai
     if norm_method == "log":
         simu_cnt_arr = sparse_cnt_log_norm(simu_cnt_arr)
     norm_simu_cnt_arr = norm_sparse_cnt_mat(simu_cnt_arr)
-    cos_simi = tr.matmul(norm_simu_cnt_arr.type(tr.float32), t_norm_gene_bin_cnt.type(tr.float32))
-    cos_simi = cos_simi.to_dense()
+    cos_simi = tr.matmul(norm_simu_cnt_arr.to_dense().type(tr.float32), t_norm_gene_bin_cnt.to_dense().type(tr.float32))
     max_cos_simi = tr.unsqueeze(tr.max(cos_simi, 1)[0], -1)
     sort_max_cos_simi, _ = tr.sort(tr.reshape(max_cos_simi, [-1]))
     quantile_cos_simi = tr.gather(sort_max_cos_simi, 0, quantile_index.type(tr.int64))
@@ -160,8 +159,7 @@ def compute_simu_info_random_worker(mu_rand_arr, norm_method, t_norm_gene_bin_cn
     if norm_method == "log":
         simu_cnt_arr = sparse_cnt_log_norm(simu_cnt_arr)
     norm_simu_cnt_arr = norm_sparse_cnt_mat(simu_cnt_arr)
-    cos_simi = tr.matmul(norm_simu_cnt_arr, t_norm_gene_bin_cnt)
-    cos_simi = cos_simi.to_dense()
+    cos_simi = tr.matmul(norm_simu_cnt_arr.to_dense(), t_norm_gene_bin_cnt.to_dense())
     max_cos_simi = tr.unsqueeze(tr.max(cos_simi, 1)[0], -1)
     sort_max_cos_simi, _ = tr.sort(tr.reshape(max_cos_simi, [-1]))
     quantile_cos_simi = tr.gather(sort_max_cos_simi, 0, quantile_index.type(tr.int64))

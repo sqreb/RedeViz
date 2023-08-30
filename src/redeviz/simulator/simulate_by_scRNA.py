@@ -69,7 +69,7 @@ class scRnaCellMapInfo(CellMapInfo):
         self.layout_info = dict()
         self.shape_info = dict()
         self.point_num_info = dict()
-        exp_cell_num = x_range * y_range / 3e8
+        exp_cell_num = x_range * y_range / 4e8
         scRNA_cell_num = sum(data_set.cell_num_dict.values())
         cell_num_fct = exp_cell_num / scRNA_cell_num
         for cell_type in self.cell_type:

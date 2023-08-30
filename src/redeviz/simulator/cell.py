@@ -775,9 +775,11 @@ class CellMap(object):
         logging.info("Simulating layout and cells")
         for index in range(10):
             logging.info(f"Round: {index}")
+            logging.info("Layout simulation")
             is_fail = self.layout_simulation()
             if is_fail:
                 raise ValueError("Please check layout configure")
+            logging.info("Cell shape simulation")
             is_fail = self.shape_simulation()
             if is_fail:
                 continue
@@ -785,7 +787,7 @@ class CellMap(object):
         if is_fail:
             raise ValueError("Please check shape configure")
         logging.info("Simulating RNA points")
-        self.RNA_point_simulation()
+        # self.RNA_point_simulation()
 
     def write_dataset(self, f_dir):
         logging.info("Writting spatial dataset ...")

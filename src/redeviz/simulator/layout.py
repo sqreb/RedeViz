@@ -9,6 +9,7 @@ from shapely.affinity import rotate, translate
 from shapely.prepared import prep
 from shapely import wkt
 from redeviz.simulator.utils import radian2angle, uniform2D
+import logging
 
 class Layout(object):
     def __init__(self, x_range: int, y_range: int, nucleis_radius: float) -> None:
@@ -132,7 +133,7 @@ class RandomLayout(Layout):
     @classmethod
     def get_simulate_info(cls, cfg: dict) -> dict:
         alpha = 1
-        circle_radius = 10000
+        circle_radius = 12000
         if "layout_alpha" in cfg.keys():
             alpha = cfg["layout_alpha"]
         if "layout_circle_radius" in cfg.keys():

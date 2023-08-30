@@ -16,8 +16,8 @@ class Shape(object):
         raise NotImplementedError()
 
     def get_simulate_info(self, cfg: dict) -> dict:
-        a = uniform(5500, 7500)
-        b = uniform(5500, 7500)
+        a = uniform(6100, 11000)
+        b = uniform(6100, 11000)
         phi = None
         is_steel = False
         if "shape_a" in cfg.keys():
@@ -126,8 +126,8 @@ class StarShape(Shape):
     def get_simulate_info(self, cfg: dict) -> dict:
         N = randint(4, 7)
         alpha = 0.4
-        a = uniform(5500, 7500) * 2
-        b = uniform(5500, 7500) * 2
+        a = uniform(6100, 11000) * 2
+        b = uniform(6100, 11000) * 2
         phi = None
         is_steel = False
         if "shape_N" in cfg.keys():
@@ -171,8 +171,8 @@ class RandomShape(Shape):
         self.polygon = pol
 
     def get_simulate_info(self, cfg: dict) -> dict:
-        min_R = 5100
-        max_R = 7500
+        min_R = 6100
+        max_R = 11000
         is_steel = False
         if "shape_min_R" in cfg.keys():
             min_R = cfg["shape_min_R"]

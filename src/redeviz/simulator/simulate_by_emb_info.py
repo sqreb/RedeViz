@@ -80,7 +80,7 @@ class EmbBinCellMapInfo(CellMapInfo):
         self.layout_info = dict()
         self.shape_info = dict()
         self.point_num_info = dict()
-        exp_cell_num = x_range * y_range / 2e8
+        exp_cell_num = x_range * y_range / 4e8
         scRNA_cell_num = sum(data_set.cell_num_dict.values())
         cell_num_fct = exp_cell_num / scRNA_cell_num
         all_div_num = 0
@@ -300,9 +300,9 @@ class EmbBinCellMap(CellMap):
             )
         ggsave(p, filename=os.path.join(f_dir, "CellShape.pdf"), width=51, height=50, limitsize=False, units="cm")
 
-        self.RNA_point_df = self.RNA_point_df[(self.RNA_point_df["x"]>=0) & (self.RNA_point_df["x"]<=self.map_info.x_range)]
-        self.RNA_point_df = self.RNA_point_df[(self.RNA_point_df["y"]>=0) & (self.RNA_point_df["y"]<=self.map_info.y_range)]
-        self.RNA_point_df.to_csv(os.path.join(f_dir, "RNA_points.tsv"), sep="\t", index_label=False, index=False)
+        # self.RNA_point_df = self.RNA_point_df[(self.RNA_point_df["x"]>=0) & (self.RNA_point_df["x"]<=self.map_info.x_range)]
+        # self.RNA_point_df = self.RNA_point_df[(self.RNA_point_df["y"]>=0) & (self.RNA_point_df["y"]<=self.map_info.y_range)]
+        # self.RNA_point_df.to_csv(os.path.join(f_dir, "RNA_points.tsv"), sep="\t", index_label=False, index=False)
 
 
 def simulate_by_emb_info_main(args):
