@@ -1,0 +1,11 @@
+numpy==1.23.0
+pandas==1.4.3
+plotnine==0.9.0
+matplotlib==3.5.2
+scipy==1.9.0
+scanpy==1.9.1
+nvidia-ml-py==11.515.75
+Shapely==1.8.2
+tifffile==2023.4.12
+pynvml==11.4.1
+kornia==0.7.0
