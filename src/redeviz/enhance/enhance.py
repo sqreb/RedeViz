@@ -53,17 +53,29 @@ def enhance_main(args):
         args.mid_signal_cutoff = get_ave_smooth_cov(total_UMI_arr)
         logging.info(f"The global coverage threshold is {args.mid_signal_cutoff}")
 
+    is_empty = False
     if args.slice_x is not None:
         assert args.slice_y
-        spot_data = SparseTenserSlice2D(spot_data, args.slice_x[0], args.slice_x[1], args.slice_y[0], args.slice_y[1])
-        total_UMI_arr =  total_UMI_arr[:, args.slice_x[0]: args.slice_x[1], args.slice_y[0]: args.slice_y[1], :]
-        x0 = args.slice_x[0]
-        y0 = args.slice_y[0]
+        _, x_min, y_min, _ = tr.min(spot_data.indices(), 1)[0].numpy()
+        if (x_range <= args.slice_x[0]) | (y_range <= args.slice_y[0]) | (x_min <= args.slice_x[1]) | (y_min <= args.slice_y[1]):
+            is_empty = True
+        else:
+            args.slice_x[1] = min(args.slice_x[1], x_range)
+            args.slice_y[1] = min(args.slice_y[1], y_range)
+            if min((args.slice_x[1] - args.slice_x[0]), (args.slice_y[1] - args.slice_y[0])) < (4 * dataset.max_bin_size):
+                raise ValueError("Slice region is too small")
+            spot_data = SparseTenserSlice2D(spot_data, args.slice_x[0], args.slice_x[1], args.slice_y[0], args.slice_y[1])
+            total_UMI_arr =  total_UMI_arr[:, args.slice_x[0]: args.slice_x[1], args.slice_y[0]: args.slice_y[1], :]
+            x0 = args.slice_x[0]
+            y0 = args.slice_y[0]
     else:
         x0 = 0
         y0 = 0
 
     if tr.sparse.sum(spot_data) == 0:
+        is_empty = True
+    
+    if is_empty:
         with open(args.output, "w") as f:
             header = ["x", "y", "EmbeddingState", "Embedding1", "Embedding2", "Embedding3", "LabelTransfer", "ArgMaxCellType", "RefCellTypeScore", "OtherCellTypeScore", "BackgroundScore"]
             f.write("\t".join(header)+"\n")
