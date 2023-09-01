@@ -62,6 +62,12 @@ def enhance_main(args):
         x0 = 0
         y0 = 0
 
+    if tr.sparse.sum(spot_data) == 0:
+        with open(args.output, "w") as f:
+            header = ["x", "y", "EmbeddingState", "Embedding1", "Embedding2", "Embedding3", "LabelTransfer", "ArgMaxCellType", "RefCellTypeScore", "OtherCellTypeScore", "BackgroundScore"]
+            f.write("\t".join(header)+"\n")
+        return None
+
     if args.ave_bin_dist_cutoff is None:
         args.ave_bin_dist_cutoff = max(2, int(10 / dataset.embedding_resolution))
 
@@ -93,11 +99,3 @@ def enhance_main(args):
             if tr.cuda.is_available():
                 tr.cuda.empty_cache()
 
-
-
-# dataset = RedeVizBinIndex("/home/wangdehe/project/RedeViz_ms/ST_simulator/analysis/RedeViz_enhance_index/UMAP2/Eye.index.pkl", 21, 'cuda:2')
-# spot_data, total_UMI_arr, x_range, y_range = load_spot_data("/home/wangdehe/project/RedeViz_ms/ST_simulator/analysis/simulated_ST_data/Eye/rep0/spot.tsv", "spot_x_index", "spot_y_index", "Gid", "UMI", 0.05, dataset)
-# spot_data = SparseTenserSlice2D(spot_data, 100, 350, 100, 350)
-# total_UMI_arr = total_UMI_arr[:, 100:350, 100:350, :]
-# model = RedeVizBinModel(dataset, spot_data, total_UMI_arr)
-# self = model
