@@ -3,6 +3,7 @@ from redeviz.enhance.io import RedeVizBinIndex, load_spot_data
 from redeviz.enhance.bin_model import RedeVizBinModel
 from redeviz.enhance.utils import SparseZeroPadding2D, SparseTenserSlice2D, select_device
 import logging
+import numpy as np
 
 def div_spot(spot_data, total_UMI_arr, expand_size, step=256):
     _, x_range, y_range, gene_num = spot_data.shape
@@ -14,12 +15,12 @@ def div_spot(spot_data, total_UMI_arr, expand_size, step=256):
         x_end = min(x_start+step, x_range)
         if x_end < x_min:
             continue
-        tmp_x_slice_spot_data = tr.index_select(expand_spot_data, 1, tr.LongTensor(tr.arange(x_start, x_end+2*expand_size).type(tr.int64)))
+        tmp_x_slice_spot_data = tr.index_select(expand_spot_data, 1, tr.LongTensor(tr.tensor(np.arange(x_start, x_end+2*expand_size), dtype=tr.int64, device=spot_data.device)))
         for y_start in range(0, y_range, step):
             y_end = min(y_start+step, y_range)
             if y_end < y_min:
                 continue
-            tmp_spot_data = tr.index_select(tmp_x_slice_spot_data, 2, tr.LongTensor(tr.arange(y_start, y_end+2*expand_size).type(tr.int64)))
+            tmp_spot_data = tr.index_select(tmp_x_slice_spot_data, 2, tr.LongTensor(tr.tensor(np.arange(y_start, y_end+2*expand_size), dtype=tr.int64, device=spot_data.device)))
             tmp_spot_data = tmp_spot_data.coalesce()
             if int(tr.sparse.sum(tmp_spot_data)) == 0:
                 continue

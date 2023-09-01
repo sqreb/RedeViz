@@ -81,8 +81,8 @@ def SparseZeroPadding2D(tensor, x_expand_size, y_expand_size):
     return res
 
 def SparseTenserSlice2D(tensor, x_start, x_end, y_start, y_end):
-    tmp_x_slice = tr.index_select(tensor, 1, tr.LongTensor(tr.arange(x_start, x_end).type(tr.int64)))
-    sliced_tensor = tr.index_select(tmp_x_slice, 2, tr.LongTensor(tr.arange(y_start, y_end).type(tr.int64)))
+    tmp_x_slice = tr.index_select(tensor, 1, tr.LongTensor(tr.tensor(np.arange(x_start, x_end), dtype=tr.int64, device=tensor.device)))
+    sliced_tensor = tr.index_select(tmp_x_slice, 2, tr.LongTensor(tr.tensor(np.arange(y_start, y_end), dtype=tr.int64, device=tensor.device)))
     sliced_tensor = sliced_tensor.coalesce()
     return sliced_tensor
 
