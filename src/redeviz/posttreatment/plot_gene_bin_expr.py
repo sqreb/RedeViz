@@ -5,6 +5,8 @@ from matplotlib import pyplot as plt
 from scipy.sparse import coo_matrix
 
 def mat2image_arr(gid, spot_df, nbg_label_arr, x_range, y_range, gene_name_label, UMI_label, x_label, y_label):
+    if gid is None:
+        return None
     tmp_spot_df = spot_df[spot_df[gene_name_label]==gid]
     expr_arr = coo_matrix((tmp_spot_df[UMI_label].to_numpy(), (tmp_spot_df[x_label].to_numpy(), tmp_spot_df[y_label].to_numpy())), (x_range+1, y_range+1)).toarray()
     nzo_arr = expr_arr[expr_arr>0]
@@ -54,12 +56,10 @@ def plot_gene_bin_expr_main(args):
     nbg_label_arr = coo_matrix(([True] * pos_df.shape[0], (pos_df[x_label].to_numpy(), pos_df[y_label].to_numpy())), (x_range+1, y_range+1))
     nbg_label_arr = nbg_label_arr.toarray()
 
-    if R is not None:
-        R_arr = mat2image_arr(R, spot_df, nbg_label_arr, x_range, y_range, gene_name_label, UMI_label, x_label, y_label)
-    if G is not None:
-        G_arr = mat2image_arr(G, spot_df, nbg_label_arr, x_range, y_range, gene_name_label, UMI_label, x_label, y_label)
-    if B is not None:
-        B_arr = mat2image_arr(B, spot_df, nbg_label_arr, x_range, y_range, gene_name_label, UMI_label, x_label, y_label)
+    R_arr = mat2image_arr(R, spot_df, nbg_label_arr, x_range, y_range, gene_name_label, UMI_label, x_label, y_label)
+    G_arr = mat2image_arr(G, spot_df, nbg_label_arr, x_range, y_range, gene_name_label, UMI_label, x_label, y_label)
+    B_arr = mat2image_arr(B, spot_df, nbg_label_arr, x_range, y_range, gene_name_label, UMI_label, x_label, y_label)
+
     img_arr = single_panel2multi_panel(x_range, y_range, nbg_label_arr, r_arr=R_arr, g_arr=G_arr, b_arr=B_arr)
     plt.imsave(f_out, cv.rotate(img_arr, cv.ROTATE_90_COUNTERCLOCKWISE))
 
