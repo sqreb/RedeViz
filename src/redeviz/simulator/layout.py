@@ -133,7 +133,7 @@ class RandomLayout(Layout):
     @classmethod
     def get_simulate_info(cls, cfg: dict) -> dict:
         alpha = 1
-        circle_radius = 12000
+        circle_radius = 11500
         if "layout_alpha" in cfg.keys():
             alpha = cfg["layout_alpha"]
         if "layout_circle_radius" in cfg.keys():
@@ -163,8 +163,8 @@ class RectangleLayout(Layout):
 
     @classmethod
     def get_simulate_info(cls, cfg: dict) -> dict:
-        a = 12000
-        b = 12000
+        a = 11500
+        b = 11500
         sigma_x = a / 5
         sigma_y = a / 5
         phi = uniform(0, np.pi)
@@ -211,7 +211,7 @@ class TriangleLayout(Layout):
 
     @classmethod
     def get_simulate_info(cls, cfg: dict) -> dict:
-        a = 12000
+        a = 11500
         sigma_x = a / 5
         sigma_y = a / 5
         phi = uniform(0, np.pi)
@@ -257,7 +257,7 @@ class HexagonalLayout(Layout):
 
     @classmethod
     def get_simulate_info(cls, cfg: dict) -> dict:
-        a = 12000
+        a = 11500
         sigma_x = a / 5
         sigma_y = a / 5
         phi = uniform(0, np.pi)
@@ -296,8 +296,8 @@ class ParallelogramLayout(Layout):
 
     @classmethod
     def get_simulate_info(cls, cfg: dict) -> dict:
-        a = 12000
-        b = 12000
+        a = 11500
+        b = 11500
         sigma_x = a / 5
         sigma_y = a / 5
         alpha = uniform(0, np.pi)

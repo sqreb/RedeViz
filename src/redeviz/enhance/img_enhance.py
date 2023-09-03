@@ -1,55 +1,23 @@
 import torch as tr
-from redeviz.enhance.io import RedeVizBinIndex, load_spot_data
-from redeviz.enhance.bin_model import RedeVizBinModel
-from redeviz.enhance.utils import SparseZeroPadding2D, SparseTenserSlice2D, select_device
+from redeviz.enhance.io import RedeVizImgBinIndex, load_spot_data
+from redeviz.enhance.bin_model import RedeVizImgBinModel
+from redeviz.enhance.utils import SparseTenserSlice2D, select_device
+from redeviz.enhance.enhance import div_spot, get_ave_smooth_cov
 import logging
-import numpy as np
 
-def div_spot(spot_data, total_UMI_arr, expand_size, step=256):
-    _, x_range, y_range, gene_num = spot_data.shape
-    _, x_min, y_min, _ = tr.min(spot_data.indices(), 1)[0].numpy()
-    expand_spot_data = SparseZeroPadding2D(spot_data,expand_size, expand_size)
-    expand_spot_data = expand_spot_data.coalesce()
-    expand_UMI_arr = tr.permute(tr.nn.ZeroPad2d(expand_size)(tr.permute(total_UMI_arr, [0, 3, 1, 2])), [0, 2, 3, 1])
-    for x_start in range(0, x_range, step):
-        x_end = min(x_start+step, x_range)
-        if x_end < x_min:
-            continue
-        tmp_x_slice_spot_data = tr.index_select(expand_spot_data, 1, tr.LongTensor(tr.tensor(np.arange(x_start, x_end+2*expand_size), dtype=tr.int64, device=spot_data.device)))
-        for y_start in range(0, y_range, step):
-            y_end = min(y_start+step, y_range)
-            if y_end < y_min:
-                continue
-            tmp_spot_data = tr.index_select(tmp_x_slice_spot_data, 2, tr.LongTensor(tr.tensor(np.arange(y_start, y_end+2*expand_size), dtype=tr.int64, device=spot_data.device)))
-            tmp_spot_data = tmp_spot_data.coalesce()
-            if int(tr.sparse.sum(tmp_spot_data)) == 0:
-                continue
-            tmp_total_UMI_arr = expand_UMI_arr[:, x_start:(x_end+2*expand_size), y_start:(y_end+2*expand_size), :]
-            yield (tmp_spot_data, tmp_total_UMI_arr, x_start, y_start)
 
-def get_ave_smooth_cov(total_UMI_arr: tr.Tensor, expand_size=10, denoise_cutoff=0.3):
-    total_umi = total_UMI_arr.to_sparse_coo()
-    new_indices = total_umi.indices() / expand_size
-    new_indices = new_indices.type(tr.int64)
-    sm_total_umi = tr.sparse_coo_tensor(new_indices, total_umi.values(), total_UMI_arr.shape)
-    sm_total_umi = sm_total_umi.coalesce()
-    nzo_total_umi = sm_total_umi.values() / (expand_size * expand_size)
-    res = float(tr.mean(nzo_total_umi))
-    denoise_nzo_total_umi = nzo_total_umi[nzo_total_umi>(res*denoise_cutoff)]
-    res = float(tr.mean(denoise_nzo_total_umi))
-    return res
-
-def enhance_main(args):
+def img_enhance_main(args):
     with tr.no_grad():
         device = args.device_name
         if device is None:
             device = select_device()
 
         logging.info("Loding index and spots data ...")
-        dataset = RedeVizBinIndex(args.index, args.cell_radius, device)
+        dataset = RedeVizImgBinIndex(args.index, args.cell_radius, device)
         spot_data, total_UMI_arr, x_range, y_range = load_spot_data(
             args.spot, args.x_index_label, args.y_index_label, args.gene_name_label, args.UMI_label, args.max_expr_ratio, dataset
         )
+        dataset.get_ST_norm_cutoff(spot_data)
 
         if args.mid_signal_cutoff is None:
             logging.info("Computing global coverage threshold ...")
@@ -99,7 +67,7 @@ def enhance_main(args):
                 x_end = min(x_start+args.window_size-1, x_range-1)
                 y_end = min(y_start+args.window_size-1, y_range-1)
                 logging.info(f"Spot region: x: {x_start}-{x_end}, y: {y_start}-{y_end}")
-                model = RedeVizBinModel(dataset, tmp_spot_data, tmp_total_UMI_arr)
+                model = RedeVizImgBinModel(dataset, tmp_spot_data, tmp_total_UMI_arr)
                 model.compute_all(args.mid_signal_cutoff, args.neighbor_close_label_fct, args.signal_cov_score_fct, args.is_in_ref_score_fct, args.argmax_prob_score_fct, args.ave_bin_dist_cutoff, args.update_num)
                 for data in model.iter_result(skip_bg=True):
                     if min(data[0], data[1]) < dataset.cell_radius:

@@ -81,20 +81,16 @@ class RedeVizBinModel(object):
         min_cos_simi_values = min_cos_simi_cutoff[list(min_cos_simi_indices.T)]
         min_cos_simi_arr = tr.reshape(min_cos_simi_values, [1, self.x_range-2*self.max_bin_expand_size, self.y_range-2*self.max_bin_expand_size, self.dataset.bin_num])
         low_cos_simi_arr = tr.unsqueeze(tr.all(self.max_cos_simi_arr < min_cos_simi_arr, -1), -1)
-        total_cos_simi_arr = tr.concat([
-            total_cos_simi_arr, 
-            low_cos_simi_arr.type(tr.float32)*(2*self.dataset.bin_num+1),
-            is_low_expr.type(tr.float32)*(4*self.dataset.bin_num+1)
-            ], -1)
-        which_max_arr = tr.argmax(total_cos_simi_arr, -1)
-        which_max_arr = tr.unsqueeze(which_max_arr, -1)
+        which_max_arr = tr.max(total_cos_simi_arr, -1)[1].unsqueeze(-1)
+        which_max_arr[low_cos_simi_arr] = self.dataset.embedding_bin_num
+        which_max_arr[is_low_expr] = self.dataset.embedding_bin_num + 1
         return which_max_arr
     
     def init_label_arr(self, low_expr_cutoff=0.3) -> None:
         self.label_arr = self.init_label_arr_worker(low_expr_cutoff)
 
     def compute_signal_cov_score(self, mid_signal_cutoff=1.0):
-        self.bg_score_arr = mid_signal_cutoff - self.ave_expr_arr
+        self.bg_score_arr = (mid_signal_cutoff - self.ave_expr_arr) / mid_signal_cutoff
 
     def init_neighbor_padding_indices(self, max_dist_cutoff=5):
         self.neighbor_padding_arr = (self.dataset.bin_dist<=max_dist_cutoff).type(tr.int64)[:self.dataset.embedding_bin_num,:]
@@ -321,6 +317,7 @@ class RedeVizBinModel(object):
             emb1_arr = self.dataset.embedding_info["Embedding1BinIndex"].to_numpy()
             emb2_arr = self.dataset.embedding_info["Embedding2BinIndex"].to_numpy()
             emb3_arr = self.dataset.embedding_info["Embedding3BinIndex"].to_numpy()
+            bin_index_li = self.dataset.embedding_info["BinIndex"].to_numpy()
             for embedding_state, (_, x_index, y_index, _), (embedding1_bin_index, embedding2_bin_index, embedding3_bin_index, LabelTransfer)  in zip(label_arr, list(pos_arr), list(label_embedding_info)):
                 if skip_bg and (LabelTransfer == "Background"):
                         continue
@@ -330,6 +327,7 @@ class RedeVizBinModel(object):
                 tmp_emb1 = emb1_arr[tmp_bin_index]
                 tmp_emb2 = emb2_arr[tmp_bin_index]
                 tmp_emb3 = emb3_arr[tmp_bin_index]
+                tmp_res_bin_index = bin_index_li[tmp_bin_index]
                 if LabelTransfer in ["Background", "Other"]:
                     tmp_emb_score_arr = argmax_emb_score_arr[x_index, y_index]
                     tmp_emb_cell_type = cell_type_li[argmax_emb_arr[x_index, y_index]]
@@ -343,8 +341,19 @@ class RedeVizBinModel(object):
                 elif tmp_emb_score_arr < tmp_other_score:
                     LabelTransfer = "Other"
                 res = [
-                    x_index, y_index, tmp_bin_index, 
+                    x_index, y_index, tmp_res_bin_index, 
                     tmp_emb1*self.dataset.embedding_resolution, tmp_emb2*self.dataset.embedding_resolution, tmp_emb3*self.dataset.embedding_resolution, 
                     LabelTransfer, tmp_emb_cell_type, tmp_emb_score_arr, tmp_other_score, tmp_bg_score
                     ]
                 yield res
+
+
+class RedeVizImgBinModel(RedeVizBinModel):
+    def compute_cos_simi_worker(self):
+        delta_expand_size = self.max_bin_expand_size
+        simi_arr = self.dataset.compute_cos_simi(self.spot_data)
+        simi_arr = simi_arr[:, delta_expand_size: (-1*delta_expand_size), delta_expand_size: (-1*delta_expand_size), :, :]
+        return simi_arr
+    
+    def compute_is_in_ref_cell_score(self, all_state_mid_label_arr: tr.Tensor,  all_state_mid_cos_simi_arr: tr.Tensor, batch_effect_fct=1):
+        return super().compute_is_in_ref_cell_score(all_state_mid_label_arr, all_state_mid_cos_simi_arr, batch_effect_fct)

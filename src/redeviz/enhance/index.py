@@ -187,6 +187,8 @@ def compute_simu_info(gene_bin_cnt, t_norm_gene_bin_cnt, norm_method, neighbor_b
     quantile_cos_simi_li = list()
     neightbor_max_cos_simi_ratio_li = list()
     for bin_index in range(embedding_bin_num):
+        if bin_index % 10 == 0:
+            logging.info(f"{bin_index} / {embedding_bin_num}")
         tmp_cnt_arr = tr.index_select(gene_bin_cnt, 0, tr.tensor([bin_index], device=device))
         quantile_cos_simi = tr.zeros_like(quantile_index, dtype=tr.float32)
         neightbor_max_cos_simi_ratio = tr.zeros([neighbor_bin_expand_arr.shape[0], embedding_bin_num], dtype=tr.float64, device=device)
@@ -350,67 +352,70 @@ def build_embedding_index_main(args):
     norm_method = args.norm_method
     device = args.device_name
 
-    if device is None:
-        device = select_device()
-    main_bin_type_ratio_li = tr.tensor([0.75])
+    with tr.no_grad():
+        if device is None:
+            device = select_device()
+        main_bin_type_ratio_li = tr.tensor([0.75])
 
-    with open(f_in, "rb") as f:
-        embedding_dict = pickle.load(f)
+        with open(f_in, "rb") as f:
+            embedding_dict = pickle.load(f)
 
-    gene_name_arr = embedding_dict["gene_name"]
-    gene_bin_cnt = embedding_dict["gene_bin_cnt"]
-    embedding_resolution = embedding_dict["embedding_resolution"]
-    neightbor_expand_size = np.arange(int(embedding_resolution*3))
-    cell_info_df = embedding_dict["cell_info"]
-    select_embedding_info = embedding_dict["embedding_info"]
-    gene_num = len(gene_name_arr)
+        gene_name_arr = embedding_dict["gene_name"]
+        gene_bin_cnt = embedding_dict["gene_bin_cnt"]
+        embedding_resolution = embedding_dict["embedding_resolution"]
+        neightbor_expand_size = np.arange(int(embedding_resolution*3))
+        cell_info_df = embedding_dict["cell_info"]
+        select_embedding_info = embedding_dict["embedding_info"]
 
-    gene_bin_cnt = gene_bin_cnt.to(device)
-    if norm_method == "None":
-        pass
-    elif norm_method == "log":
-        gene_bin_cnt = sparse_cnt_log_norm(gene_bin_cnt)
-    else:
-        raise ValueError("norm_method must in [None, log]")
+        gene_num = len(gene_name_arr)
+        gene_bin_cnt = gene_bin_cnt.to(device)
+        if norm_method == "None":
+            pass
+        elif norm_method == "log":
+            gene_bin_cnt = sparse_cnt_log_norm(gene_bin_cnt)
+        else:
+            raise ValueError("norm_method must in [None, log]")
+        norm_gene_bin_cnt = norm_sparse_cnt_mat(gene_bin_cnt)
 
-    norm_gene_bin_cnt = norm_sparse_cnt_mat(gene_bin_cnt)
-    t_norm_gene_bin_cnt = norm_gene_bin_cnt.transpose(1, 0)
-    embedding_bin_num = select_embedding_info.shape[0]
+        t_norm_gene_bin_cnt = norm_gene_bin_cnt.transpose(1, 0)
+        embedding_bin_num = select_embedding_info.shape[0]
 
-    logging.info(f"Simulating spatial transcriptomics data and compute prior probability ...")
-    neighbor_bin_expand_li = [compute_neighbor_bin_loc(select_embedding_info, expand_size) for expand_size in neightbor_expand_size]
-    neighbor_bin_expand_arr = tr.stack(neighbor_bin_expand_li, 0)
-    neighbor_bin_expand_arr = neighbor_bin_expand_arr.to(device)
-    bin_quantile_cos_simi_li = list()
-    bin_neightbor_max_cos_simi_ratio_li = list()
-    for bin_size in bin_size_li:
-        logging.info(f"Bin size: {bin_size}")
-        UMI_per_bin = int(bin_size * bin_size * UMI_per_spot)
-        main_type_ratio_quantile_cos_simi_li = list()
-        main_type_ratio_neightbor_max_cos_simi_ratio_li = list()
-        for main_bin_type_ratio in main_bin_type_ratio_li:
-            logging.info(f"Main bin type cell ratio: {main_bin_type_ratio}")
-            quantile_cos_simi_arr, neightbor_max_cos_simi_ratio_arr = compute_simu_info(gene_bin_cnt, t_norm_gene_bin_cnt, norm_method, neighbor_bin_expand_arr, embedding_bin_num, gene_num, main_bin_type_ratio, UMI_per_bin, simulate_number_per_batch=1024, simulate_batch_num=20)
-            main_type_ratio_quantile_cos_simi_li.append(quantile_cos_simi_arr)
-            main_type_ratio_neightbor_max_cos_simi_ratio_li.append(neightbor_max_cos_simi_ratio_arr)
-        main_type_ratio_quantile_cos_simi_arr = tr.stack(main_type_ratio_quantile_cos_simi_li, 0)
-        main_type_ratio_neightbor_max_cos_simi_ratio_arr = tr.stack(main_type_ratio_neightbor_max_cos_simi_ratio_li, 0)
-        bin_quantile_cos_simi_li.append(main_type_ratio_quantile_cos_simi_arr)
-        bin_neightbor_max_cos_simi_ratio_li.append(main_type_ratio_neightbor_max_cos_simi_ratio_arr)
-    index_dict = {
-        "norm_method": norm_method,
-        "gene_name": gene_name_arr,
-        "norm_embedding_bin_cnt": norm_gene_bin_cnt.to("cpu"),
-        "neightbor_expand_size": neightbor_expand_size,
-        "main_bin_type_ratio": main_bin_type_ratio_li,
-        "bin_size": bin_size_li,
-        "quantile_cos_simi": [x.to("cpu") for x in bin_quantile_cos_simi_li], # [bin_size, main_bin_type_ratio, SimuLabel: bin_size+1 (random), quantile_num]
-        "neightbor_max_cos_simi_ratio": [x.to("cpu") for x in bin_neightbor_max_cos_simi_ratio_li],  # [bin_size, main_bin_type_ratio, neighbor_bin_expand_size, SimuLabel: bin_size (random), MaxSimiLabel: bin_size]
-        "cell_info": cell_info_df,
-        "embedding": embedding_dict["embedding"],
-        "embedding_resolution": embedding_resolution,
-        "embedding_dim": embedding_dict["embedding_dim"],
-        "embedding_info": select_embedding_info
-    }
-    with open(f_out, "wb") as f:
-        pickle.dump(index_dict, f)
+        logging.info(f"Simulating spatial transcriptomics data and compute prior probability ...")
+        neighbor_bin_expand_li = [compute_neighbor_bin_loc(select_embedding_info, expand_size) for expand_size in neightbor_expand_size]
+        neighbor_bin_expand_arr = tr.stack(neighbor_bin_expand_li, 0)
+        neighbor_bin_expand_arr = neighbor_bin_expand_arr.to(device)
+        bin_quantile_cos_simi_li = list()
+        bin_neightbor_max_cos_simi_ratio_li = list()
+        for bin_size in bin_size_li:
+            logging.info(f"Bin size: {bin_size}")
+            UMI_per_bin = int(bin_size * bin_size * UMI_per_spot)
+            main_type_ratio_quantile_cos_simi_li = list()
+            main_type_ratio_neightbor_max_cos_simi_ratio_li = list()
+            for main_bin_type_ratio in main_bin_type_ratio_li:
+                logging.info(f"Main bin type cell ratio: {main_bin_type_ratio}")
+                quantile_cos_simi_arr, neightbor_max_cos_simi_ratio_arr = compute_simu_info(gene_bin_cnt, t_norm_gene_bin_cnt, norm_method, neighbor_bin_expand_arr, embedding_bin_num, gene_num, main_bin_type_ratio, UMI_per_bin, simulate_number_per_batch=1024, simulate_batch_num=20)
+                main_type_ratio_quantile_cos_simi_li.append(quantile_cos_simi_arr)
+                main_type_ratio_neightbor_max_cos_simi_ratio_li.append(neightbor_max_cos_simi_ratio_arr)
+            main_type_ratio_quantile_cos_simi_arr = tr.stack(main_type_ratio_quantile_cos_simi_li, 0)
+            main_type_ratio_neightbor_max_cos_simi_ratio_arr = tr.stack(main_type_ratio_neightbor_max_cos_simi_ratio_li, 0)
+            bin_quantile_cos_simi_li.append(main_type_ratio_quantile_cos_simi_arr)
+            bin_neightbor_max_cos_simi_ratio_li.append(main_type_ratio_neightbor_max_cos_simi_ratio_arr)
+        index_dict = {
+            "index_type": "NGS",
+            "norm_method": norm_method,
+            "gene_name": gene_name_arr,
+            "norm_embedding_bin_cnt": norm_gene_bin_cnt.to("cpu"),
+            "neightbor_expand_size": neightbor_expand_size,
+            "main_bin_type_ratio": main_bin_type_ratio_li,
+            "bin_size": bin_size_li,
+            "quantile_cos_simi": [x.to("cpu") for x in bin_quantile_cos_simi_li], # [bin_size, main_bin_type_ratio, SimuLabel: bin_size+1 (random), quantile_num]
+            "neightbor_max_cos_simi_ratio": [x.to("cpu") for x in bin_neightbor_max_cos_simi_ratio_li],  # [bin_size, main_bin_type_ratio, neighbor_bin_expand_size, SimuLabel: bin_size (random), MaxSimiLabel: bin_size]
+            "cell_info": cell_info_df,
+            "embedding": embedding_dict["embedding"],
+            "embedding_resolution": embedding_resolution,
+            "embedding_dim": embedding_dict["embedding_dim"],
+            "embedding_info": select_embedding_info
+        }
+        with open(f_out, "wb") as f:
+            pickle.dump(index_dict, f)
+

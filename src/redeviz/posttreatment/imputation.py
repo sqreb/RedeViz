@@ -95,10 +95,7 @@ def imputation_main(args):
                     imputate_gene_list.append(gid)
 
     spot_df = pd.read_csv(f_spot, sep="\t")
-    spot_df = spot_df[spot_df["RefCellTypeScore"] > spot_df["BackgroundScore"]]
-    if args.denoise:
-        nbg_spot_df = filter_pred_df(nbg_spot_df, min_spot_in_region=args.min_spot_num)
-    
+
     total_UMI_df = spot_df.groupby(spot_pos_pos_label_li)[spot_UMI_label].agg(np.sum)
     del spot_df
     total_UMI_df = total_UMI_df.reset_index()
@@ -114,7 +111,11 @@ def imputation_main(args):
     norm_sm_UMI_mat = sm_UMI_mat / np.median(nbg_mat)
 
     pred_df = pd.read_csv(f_in, sep="\t")
+    pred_df = pred_df[pred_df["RefCellTypeScore"] > pred_df["BackgroundScore"]]
     nbg_pred_df = pred_df[pred_df["LabelTransfer"]!="Background"]
+    if args.denoise:
+        nbg_pred_df = filter_pred_df(nbg_pred_df, min_spot_in_region=args.min_spot_num)
+    
     if not keep_other:
         nbg_pred_df = nbg_pred_df[nbg_pred_df["LabelTransfer"]!="Other"]
     embedding_index_df = pd.DataFrame(embedding_index_mat, columns=["Embedding1", "Embedding2", "Embedding3"])

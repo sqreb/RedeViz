@@ -171,8 +171,8 @@ class RandomShape(Shape):
         self.polygon = pol
 
     def get_simulate_info(self, cfg: dict) -> dict:
-        min_R = 6100
-        max_R = 11000
+        min_R = 7100
+        max_R = 12000
         is_steel = False
         if "shape_min_R" in cfg.keys():
             min_R = cfg["shape_min_R"]

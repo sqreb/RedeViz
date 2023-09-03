@@ -31,8 +31,7 @@ def parse_args(args):
 
 def main(args):
     args = parse_args(args)
-    with tr.no_grad():
-        args.func(args)
+    args.func(args)
 
 def run():
     main(sys.argv[1:])

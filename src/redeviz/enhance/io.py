@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 import pickle
 from redeviz.enhance.utils import SparseSumPooling2DV2, norm_sparse_cnt_mat, sparse_cnt_log_norm, flat_coo_sparse_tensor_by_position
+from redeviz.enhance.image_index import compute_image_ST_ref_dist
+
 
 class RedeVizBinIndex(object):
     def __init__(self, f_pkl: str, cell_radius: int, device: str) -> None:
@@ -23,8 +25,8 @@ class RedeVizBinIndex(object):
         self.gene_num = len(self.gene_name)
         self.cell_info = dataset_dict["cell_info"]
         self.embedding_info = dataset_dict["embedding_info"]
-        self.embedding_info = self.embedding_info.sort_values("BinIndex")
-        self.embedding_info = self.embedding_info.reset_index()
+        self.embedding_info["RowIndex"] = np.arange(self.embedding_info.shape[0])
+        self.cell_info = self.cell_info.merge(self.embedding_info[["BinIndex", "RowIndex"]])
         self.neightbor_expand_size = dataset_dict["neightbor_expand_size"]
         self.main_bin_type_ratio = dataset_dict["main_bin_type_ratio"]
         self.embedding_resolution = dataset_dict["embedding_resolution"]
@@ -45,9 +47,9 @@ class RedeVizBinIndex(object):
 
     def compute_bin_cell_type_ratio_arr(self, cell_type: np.array, cell_info: pd.DataFrame, embedding_bin_num: int, cell_type_num: int):
         cell_type_index_dict = {ct: index for (index, ct) in enumerate(cell_type)}
-        bin_cell_type_num = cell_info.groupby(["BinIndex", "CellType"]).size().reset_index(name='CellNum')
+        bin_cell_type_num = cell_info.groupby(["RowIndex", "CellType"]).size().reset_index(name='CellNum')
         bin_cell_type_num["CellTypeIndex"] = np.array([cell_type_index_dict[ct] for ct in bin_cell_type_num["CellType"]])
-        bin_cell_type_num_arr = tr.sparse_coo_tensor(bin_cell_type_num[["BinIndex", "CellTypeIndex"]].to_numpy().T.astype(np.int64), bin_cell_type_num["CellNum"].to_numpy(), [embedding_bin_num, cell_type_num])
+        bin_cell_type_num_arr = tr.sparse_coo_tensor(bin_cell_type_num[["RowIndex", "CellTypeIndex"]].to_numpy().T.astype(np.int64), bin_cell_type_num["CellNum"].to_numpy(), [embedding_bin_num, cell_type_num])
         bin_cell_type_num_arr = bin_cell_type_num_arr.coalesce()
         bin_cell_type_num_arr = bin_cell_type_num_arr.to_dense()
         bin_cell_type_ratio_arr = bin_cell_type_num_arr / tr.unsqueeze(tr.sum(bin_cell_type_num_arr, -1), -1)
@@ -83,6 +85,91 @@ class RedeVizBinIndex(object):
         cos_simi = tr.reshape(inner_product, [1, x_range, y_range, self.embedding_bin_num])
         return cos_simi
 
+
+class RedeVizImgBinIndex(RedeVizBinIndex):
+    def __init__(self, f_pkl: str, cell_radius: int, device: str) -> None:
+        with open(f_pkl, "rb") as f:
+            dataset_dict = pickle.load(f)
+        self.device = device
+        self.bin_size = dataset_dict["bin_size"]
+        self.bin_num = len(self.bin_size)
+        self.max_bin_size = max(self.bin_size)
+        self.cell_radius = cell_radius
+        self.gene_name = dataset_dict["gene_name"]
+        self.gene_num = len(self.gene_name)
+        self.gene_norm_fct = [x.to(device) for x in dataset_dict["gene_norm_fct"]]
+        self.cell_info = dataset_dict["cell_info"]
+        self.embedding_info = dataset_dict["embedding_info"]
+        self.embedding_info["RowIndex"] = np.arange(self.embedding_info.shape[0])
+        self.cell_info = self.cell_info.merge(self.embedding_info[["BinIndex", "RowIndex"]])
+        self.neightbor_expand_size = dataset_dict["neightbor_expand_size"]
+        self.main_bin_type_ratio = dataset_dict["main_bin_type_ratio"]
+        self.embedding_resolution = dataset_dict["embedding_resolution"]
+        self.norm_embedding_bin_pct = dataset_dict["norm_embedding_bin_pct"].to(device)
+        self.quantile_cos_simi = tr.stack(dataset_dict["quantile_simi"], 0).to(device)
+        self.quantile_cos_simi = tr.permute(self.quantile_cos_simi, [2, 0, 3, 1])  # EmbeddingBinIndex, BinSize, Pct, MixRatio
+        self.quantile_cos_simi = tr.concat([self.quantile_cos_simi, tr.unsqueeze(self.quantile_cos_simi[-1, :, :, :], 0)], 0)
+        self.neightbor_max_cos_simi_ratio = tr.stack(dataset_dict["neightbor_max_simi_ratio"], 0).to(device)
+        self.neightbor_max_cos_simi_ratio = tr.concat([self.neightbor_max_cos_simi_ratio, tr.unsqueeze(self.neightbor_max_cos_simi_ratio[:, :, :, -1, :], -2)], -2)
+        self.neightbor_max_cos_simi_ratio = tr.permute(self.neightbor_max_cos_simi_ratio, [0, 1, 3, 4, 2])  # BinSize, MixRatio, EmbeddingBinLabel, MaxCosSimiEmbeddingBin, ExpandSize
+        neightbor_max_cos_simi_max_score = tr.unsqueeze(tr.max(self.neightbor_max_cos_simi_ratio, -2)[0], -2)
+        self.neightbor_max_cos_simi_score = self.neightbor_max_cos_simi_ratio / neightbor_max_cos_simi_max_score
+        self.cell_type = np.sort(np.unique(self.cell_info["CellType"].to_numpy()))
+        self.cell_type_num = len(self.cell_type)
+        self.embedding_bin_num = self.embedding_info.shape[0]
+        self.bin_cell_type_ratio = self.compute_bin_cell_type_ratio_arr(self.cell_type, self.cell_info, self.embedding_bin_num, self.cell_type_num).to(device)
+        self.bin_dist = self.compute_bin_dist(self.embedding_info).to(device)
+        self.ST_bin_cnt_cutoff_li = None
+
+    def get_ST_norm_cutoff_worker(self, spot_data, bin_size):
+        _, x_range, y_range, gene_num = spot_data.shape
+        spot_indices = spot_data.indices()
+        spot_values = spot_data.values()
+        bin_x_indices = (spot_indices[1,] / bin_size).type(tr.int64)
+        bin_y_indices = (spot_indices[2,] / bin_size).type(tr.int64)
+        bin_range = (tr.tensor(spot_data.shape) / bin_size).type(tr.int) + 1
+        spot_bin_data = tr.sparse_coo_tensor(tr.stack([bin_x_indices, bin_y_indices, spot_indices[3,]], 0), spot_values, [bin_range[1], bin_range[2], gene_num])
+        spot_bin_data = spot_bin_data.coalesce()
+        bin_indices = spot_bin_data.indices()
+        bin_gene_index = bin_indices[2,]
+        bin_values = spot_bin_data.values()
+
+        ST_bin_cnt_cutoff_li = list()
+        for gene_index in range(gene_num):
+            tmp_umi_arr = bin_values[bin_gene_index==gene_index]
+            if tmp_umi_arr.sum() == 0:
+                ST_bin_cnt_cutoff_li.append(0)
+            else:
+                ST_bin_cnt_cutoff_li.append(tr.quantile(tmp_umi_arr, 0.95))
+        ST_bin_cnt_cutoff_arr = tr.tensor(ST_bin_cnt_cutoff_li).to(self.device)
+        return ST_bin_cnt_cutoff_arr
+
+    def get_ST_norm_cutoff(self, spot_data):
+        ST_bin_cnt_cutoff_li = list()
+        for bin_size in self.bin_size:
+            ST_bin_cnt_cutoff_li.append(self.get_ST_norm_cutoff_worker(spot_data, bin_size))
+        self.ST_bin_cnt_cutoff_li = ST_bin_cnt_cutoff_li
+
+    def compute_cos_simi(self, spot_data):
+        spot_data = spot_data.coalesce()
+        simi_li = list()
+        for bin_size, ST_bin_cnt_cutoff, gene_norm_fct in zip(self.bin_size, self.ST_bin_cnt_cutoff_li, self.gene_norm_fct):
+            expand_size = int((bin_size - 1) / 2)
+            spot_data = spot_data.type(tr.float32).to(self.norm_embedding_bin_pct.device)
+            smooth_spot_arr = SparseSumPooling2DV2(spot_data, expand_size, expand_size)
+            smooth_spot_arr = smooth_spot_arr.to_dense()
+            
+            norm_ref_ST_dist_li = list()
+            for x_index in range(smooth_spot_arr.shape[1]):
+                tmp_smooth_spot_arr = smooth_spot_arr[:, x_index, :, :].unsqueeze(1)
+                tmp_norm_ref_ST_dist = compute_image_ST_ref_dist(tmp_smooth_spot_arr, ST_bin_cnt_cutoff, self.norm_embedding_bin_pct, gene_norm_fct)
+                norm_ref_ST_dist_li.append(tmp_norm_ref_ST_dist)
+            norm_ref_ST_dist = tr.concat(norm_ref_ST_dist_li, 1)
+            tmp_simi = -1 * tr.permute(norm_ref_ST_dist, [1, 2, 0])
+            simi_li.append(tmp_simi)
+        simi_arr = tr.stack(simi_li, -1).unsqueeze(0)
+        return simi_arr
+    
 def load_spot_data(fname: str, x_label: str, y_label: str, gene_label: str, UMI_label: str, max_expr_ratio: float, dataset):
     df = pd.read_csv(fname, sep="\t")
     gene2index = {gid: index for index, gid in enumerate(dataset.gene_name)}
