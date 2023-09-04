@@ -98,18 +98,8 @@ def compute_total_UMI_for_embedding_bins(gene_cnt: tr.Tensor, cell_info_df: pd.D
         bin_gene_cnt = tr.sparse_coo_tensor(bin_gene_cnt.indices(), val, bin_gene_cnt.shape)
     return bin_gene_cnt
 
-def simulate_stereo_data_from_bin_scRNA_worker(cnt_arr, UMI_per_bin, mu_rand_arr, main_bin_type_ratio):
-    cnt_arr = cnt_arr.to_dense()
-    cnt_arr = tr.squeeze(cnt_arr)
-    cnt_arr = cnt_arr + 1
-    mu_bin_arr = UMI_per_bin * cnt_arr / tr.sum(cnt_arr)
-    mu_bin_arr = tr.unsqueeze(mu_bin_arr, 0)
-    ave_mu_bin_arr = mu_bin_arr * main_bin_type_ratio + mu_rand_arr * (1-main_bin_type_ratio)
-    simu_arr = tr.distributions.poisson.Poisson(ave_mu_bin_arr).sample()
-    simu_arr = simu_arr.to_sparse_coo()
-    return simu_arr
 
-def compute_neighbor_bin_loc(bin_info: pd.DataFrame, expand_size: float):
+def compute_neighbor_bin_loc(bin_info: pd.DataFrame, expand_size: float, bin_index_name="BinIndex"):
     ori_bin_index_li = list()
     neighbor_bin_index_li = list()
 
@@ -120,13 +110,13 @@ def compute_neighbor_bin_loc(bin_info: pd.DataFrame, expand_size: float):
             tmp2_df = tmp1_df[tmp1_df["Embedding2BinIndex"]==tmp_embedding2_bin_index]
             tmp2_neighbor_df = tmp1_neighbor_df[np.abs(tmp1_neighbor_df["Embedding2BinIndex"].to_numpy()-tmp_embedding2_bin_index)<=expand_size]
             for index in range(len(tmp2_df)):
-                ori_bin_index = tmp2_df["BinIndex"].to_numpy()[index]
+                ori_bin_index = tmp2_df[bin_index_name].to_numpy()[index]
                 ori_embedding3_bin_index = tmp2_df["Embedding3BinIndex"].to_numpy()[index]
                 dist1 = tmp2_neighbor_df["Embedding1BinIndex"].to_numpy() - tmp_embedding1_bin_index
                 dist2 = tmp2_neighbor_df["Embedding2BinIndex"].to_numpy() - tmp_embedding2_bin_index
                 dist3 = tmp2_neighbor_df["Embedding3BinIndex"].to_numpy() - ori_embedding3_bin_index
                 cond = np.sqrt(dist1**2 + dist2**2 + dist3**2) <= expand_size
-                neighbor_bin_index = tmp2_neighbor_df[cond]["BinIndex"].to_numpy()
+                neighbor_bin_index = tmp2_neighbor_df[cond][bin_index_name].to_numpy()
                 ori_bin_index_li += [ori_bin_index] * len(neighbor_bin_index)
                 neighbor_bin_index_li += list(neighbor_bin_index)
     bin_num = len(bin_info)
@@ -135,65 +125,41 @@ def compute_neighbor_bin_loc(bin_info: pd.DataFrame, expand_size: float):
     loc_arr = loc_arr.to_dense()
     return loc_arr
 
-def compute_simu_info_worker(cnt_arr, norm_method, UMI_per_bin, mu_rand_arr, main_bin_type_ratio, t_norm_gene_bin_cnt, quantile_index, neighbor_bin_expand_arr):
+def compute_simu_info_worker(pct_arr, norm_method, UMI_per_bin, rand_pct_arr, main_bin_type_ratio, t_norm_gene_bin_cnt, quantile_arr, neighbor_bin_expand_arr, N):
     assert norm_method in ["None", "log"]
-    simu_cnt_arr = simulate_stereo_data_from_bin_scRNA_worker(cnt_arr, UMI_per_bin, mu_rand_arr, main_bin_type_ratio)
+    mu_simi = (pct_arr*main_bin_type_ratio + (1-main_bin_type_ratio) * rand_pct_arr) * UMI_per_bin
+    simu_cnt_arr = simu_cnt_arr = tr.distributions.poisson.Poisson(mu_simi.reshape([-1])).sample([N])
     if norm_method == "log":
-        simu_cnt_arr = sparse_cnt_log_norm(simu_cnt_arr)
-    norm_simu_cnt_arr = norm_sparse_cnt_mat(simu_cnt_arr)
-    cos_simi = tr.matmul(norm_simu_cnt_arr.to_dense().type(tr.float32), t_norm_gene_bin_cnt.to_dense().type(tr.float32))
+        simu_cnt_arr = tr.log(1 + 1e3 * simu_cnt_arr / (tr.sum(simu_cnt_arr, -1, keepdim=True) + 1e-9))
+    norm_simu_cnt_arr = simu_cnt_arr / tr.sqrt(tr.sum(simu_cnt_arr**2, -1, keepdim=True))
+    cos_simi = tr.matmul(norm_simu_cnt_arr, t_norm_gene_bin_cnt)
     max_cos_simi = tr.unsqueeze(tr.max(cos_simi, 1)[0], -1)
     sort_max_cos_simi, _ = tr.sort(tr.reshape(max_cos_simi, [-1]))
-    quantile_cos_simi = tr.gather(sort_max_cos_simi, 0, quantile_index.type(tr.int64))
-    is_max_cos_simi = cos_simi == max_cos_simi
-    is_max_cos_simi = tr.unsqueeze(is_max_cos_simi, 0)
-    is_max_cos_simi = is_max_cos_simi.type(tr.float64)
-    neightbor_is_max_cos_simi = tr.matmul(is_max_cos_simi, neighbor_bin_expand_arr)
-    neightbor_max_cos_simi_ratio = tr.mean(neightbor_is_max_cos_simi, 1)
+    quantile_cos_simi = tr.quantile(sort_max_cos_simi, quantile_arr, 0)
+    bin_num = t_norm_gene_bin_cnt.shape[1]
+    max_simi, arg_max_simi = tr.max(cos_simi, 0)
+    arg_max_simi_ratio = tr.bincount(arg_max_simi, minlength=bin_num) / N
+    neightbor_max_cos_simi_ratio = tr.matmul(neighbor_bin_expand_arr.reshape([-1, bin_num]).type(tr.float32), arg_max_simi_ratio.reshape([-1, 1])).reshape([-1, bin_num])
     return quantile_cos_simi, neightbor_max_cos_simi_ratio
 
-def compute_simu_info_random_worker(mu_rand_arr, norm_method, t_norm_gene_bin_cnt, quantile_index, neighbor_bin_expand_arr):
-    assert norm_method in ["None", "log"]
-    simu_cnt_arr = tr.distributions.poisson.Poisson(mu_rand_arr).sample()
-    simu_cnt_arr = simu_cnt_arr.to_sparse_coo()
-    if norm_method == "log":
-        simu_cnt_arr = sparse_cnt_log_norm(simu_cnt_arr)
-    norm_simu_cnt_arr = norm_sparse_cnt_mat(simu_cnt_arr)
-    cos_simi = tr.matmul(norm_simu_cnt_arr.to_dense(), t_norm_gene_bin_cnt.to_dense())
-    max_cos_simi = tr.unsqueeze(tr.max(cos_simi, 1)[0], -1)
-    sort_max_cos_simi, _ = tr.sort(tr.reshape(max_cos_simi, [-1]))
-    quantile_cos_simi = tr.gather(sort_max_cos_simi, 0, quantile_index.type(tr.int64))
-    is_max_cos_simi = cos_simi == max_cos_simi
-    is_max_cos_simi = tr.unsqueeze(is_max_cos_simi, 0)
-    is_max_cos_simi = is_max_cos_simi.type(tr.float64)
-    neightbor_is_max_cos_simi = tr.matmul(is_max_cos_simi, neighbor_bin_expand_arr)
-    neightbor_max_cos_simi_ratio = tr.mean(neightbor_is_max_cos_simi, 1)
-    return quantile_cos_simi, neightbor_max_cos_simi_ratio
 
-def compute_mu_rand(simulate_num, embedding_bin_num, UMI_per_bin, gene_bin_cnt):
-    rand_fac = tr.distributions.categorical.Categorical(logits=tr.log(tr.tensor([0.5, 0.2], device=gene_bin_cnt.device))).sample([simulate_num, embedding_bin_num])
-    rand_fac = rand_fac.type(tr.float32)
-    rand_cnt = tr.transpose(tr.matmul(tr.transpose(gene_bin_cnt, 1, 0), tr.transpose(rand_fac, 1, 0)), 1, 0)
-    norm_fct = tr.unsqueeze(1/tr.sum(rand_cnt, 1), -1)
-    mu_rand_arr = UMI_per_bin * rand_cnt * norm_fct
-    return mu_rand_arr
+def compute_simu_info_dense_arr(dense_gene_bin_cnt, dense_t_norm_gene_bin_cnt, norm_method, neighbor_bin_expand_arr, embedding_bin_num, gene_num, main_bin_type_ratio, UMI_per_bin, simulate_number_per_batch=1024, simulate_batch_num=20):
+    device=dense_gene_bin_cnt.device
+    ave_cnt = dense_gene_bin_cnt.mean(0)
+    ave_pct = ave_cnt / ave_cnt.sum()
 
-def compute_simu_info(gene_bin_cnt, t_norm_gene_bin_cnt, norm_method, neighbor_bin_expand_arr, embedding_bin_num, gene_num, main_bin_type_ratio, UMI_per_bin, simulate_number_per_batch=1024, simulate_batch_num=20):
-    device=gene_bin_cnt.device
-    mu_rand_arr = compute_mu_rand(simulate_number_per_batch, embedding_bin_num, UMI_per_bin, gene_bin_cnt)
-
-    quantile_index = tr.tensor([0, 0.05, 0.25, 0.5, 0.75, 0.95, 1], device=device) * (simulate_number_per_batch-1)
-    quantile_index = quantile_index.type(tr.int32)
+    quantile_arr = tr.tensor([0, 0.05, 0.25, 0.5, 0.75, 0.95, 1], device=device)
     quantile_cos_simi_li = list()
     neightbor_max_cos_simi_ratio_li = list()
     for bin_index in range(embedding_bin_num):
         if bin_index % 10 == 0:
             logging.info(f"{bin_index} / {embedding_bin_num}")
-        tmp_cnt_arr = tr.index_select(gene_bin_cnt, 0, tr.tensor([bin_index], device=device))
-        quantile_cos_simi = tr.zeros_like(quantile_index, dtype=tr.float32)
+        tmp_cnt_arr = dense_gene_bin_cnt[bin_index,:]
+        tmp_pct_arr = tmp_cnt_arr / tmp_cnt_arr.sum()
+        quantile_cos_simi = tr.zeros_like(quantile_arr, dtype=tr.float32)
         neightbor_max_cos_simi_ratio = tr.zeros([neighbor_bin_expand_arr.shape[0], embedding_bin_num], dtype=tr.float64, device=device)
         for batch_index in range(simulate_batch_num):
-            tmp_quantile_cos_simi, tmp_neightbor_max_cos_simi_ratio = compute_simu_info_worker(tmp_cnt_arr, norm_method, UMI_per_bin, mu_rand_arr, main_bin_type_ratio, t_norm_gene_bin_cnt, quantile_index, neighbor_bin_expand_arr)
+            tmp_quantile_cos_simi, tmp_neightbor_max_cos_simi_ratio = compute_simu_info_worker(tmp_pct_arr, norm_method, UMI_per_bin, ave_pct, main_bin_type_ratio, dense_t_norm_gene_bin_cnt, quantile_arr, neighbor_bin_expand_arr, simulate_number_per_batch)
             quantile_cos_simi = quantile_cos_simi + tmp_quantile_cos_simi
             neightbor_max_cos_simi_ratio = neightbor_max_cos_simi_ratio + tmp_neightbor_max_cos_simi_ratio
         quantile_cos_simi = quantile_cos_simi / simulate_batch_num
@@ -201,10 +167,10 @@ def compute_simu_info(gene_bin_cnt, t_norm_gene_bin_cnt, norm_method, neighbor_b
         quantile_cos_simi_li.append(quantile_cos_simi)
         neightbor_max_cos_simi_ratio_li.append(neightbor_max_cos_simi_ratio)
     
-    rand_quantile_cos_simi = tr.zeros_like(quantile_index, dtype=tr.float32)
+    rand_quantile_cos_simi = tr.zeros_like(quantile_arr, dtype=tr.float32)
     rand_neightbor_max_cos_simi_ratio = tr.zeros([neighbor_bin_expand_arr.shape[0], embedding_bin_num], dtype=tr.float64, device=device)
     for batch_index in range(simulate_batch_num):
-        tmp_rand_quantile_cos_simi, tmp_rand_neightbor_max_cos_simi_ratio = compute_simu_info_random_worker(mu_rand_arr, norm_method, t_norm_gene_bin_cnt, quantile_index, neighbor_bin_expand_arr)
+        tmp_rand_quantile_cos_simi, tmp_rand_neightbor_max_cos_simi_ratio = compute_simu_info_worker(ave_pct, norm_method, UMI_per_bin, ave_pct, main_bin_type_ratio, dense_t_norm_gene_bin_cnt, quantile_arr, neighbor_bin_expand_arr, simulate_number_per_batch)
         rand_quantile_cos_simi = rand_quantile_cos_simi + tmp_rand_quantile_cos_simi
         rand_neightbor_max_cos_simi_ratio = rand_neightbor_max_cos_simi_ratio + tmp_rand_neightbor_max_cos_simi_ratio
     rand_quantile_cos_simi = rand_quantile_cos_simi / simulate_batch_num
@@ -377,8 +343,11 @@ def build_embedding_index_main(args):
             raise ValueError("norm_method must in [None, log]")
         norm_gene_bin_cnt = norm_sparse_cnt_mat(gene_bin_cnt)
 
-        t_norm_gene_bin_cnt = norm_gene_bin_cnt.transpose(1, 0)
         embedding_bin_num = select_embedding_info.shape[0]
+        dense_gene_bin_cnt = gene_bin_cnt.to_dense()
+        dense_norm_gene_bin_cnt = norm_gene_bin_cnt.to_dense()
+        dense_t_norm_gene_bin_cnt = dense_norm_gene_bin_cnt.transpose(1, 0)
+
 
         logging.info(f"Simulating spatial transcriptomics data and compute prior probability ...")
         neighbor_bin_expand_li = [compute_neighbor_bin_loc(select_embedding_info, expand_size) for expand_size in neightbor_expand_size]
@@ -393,7 +362,7 @@ def build_embedding_index_main(args):
             main_type_ratio_neightbor_max_cos_simi_ratio_li = list()
             for main_bin_type_ratio in main_bin_type_ratio_li:
                 logging.info(f"Main bin type cell ratio: {main_bin_type_ratio}")
-                quantile_cos_simi_arr, neightbor_max_cos_simi_ratio_arr = compute_simu_info(gene_bin_cnt, t_norm_gene_bin_cnt, norm_method, neighbor_bin_expand_arr, embedding_bin_num, gene_num, main_bin_type_ratio, UMI_per_bin, simulate_number_per_batch=1024, simulate_batch_num=20)
+                quantile_cos_simi_arr, neightbor_max_cos_simi_ratio_arr = compute_simu_info_dense_arr(dense_gene_bin_cnt, dense_t_norm_gene_bin_cnt, norm_method, neighbor_bin_expand_arr, embedding_bin_num, gene_num, main_bin_type_ratio, UMI_per_bin, simulate_number_per_batch=1024, simulate_batch_num=20)
                 main_type_ratio_quantile_cos_simi_li.append(quantile_cos_simi_arr)
                 main_type_ratio_neightbor_max_cos_simi_ratio_li.append(neightbor_max_cos_simi_ratio_arr)
             main_type_ratio_quantile_cos_simi_arr = tr.stack(main_type_ratio_quantile_cos_simi_li, 0)

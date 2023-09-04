@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pickle
 from redeviz.enhance.utils import SparseSumPooling2DV2, norm_sparse_cnt_mat, sparse_cnt_log_norm, flat_coo_sparse_tensor_by_position
-from redeviz.enhance.image_index import compute_image_ST_ref_dist
+from redeviz.enhance.image_index import compute_image_ST_ref_dist, ImgStEmbSimiModel
 
 
 class RedeVizBinIndex(object):
@@ -26,7 +26,8 @@ class RedeVizBinIndex(object):
         self.cell_info = dataset_dict["cell_info"]
         self.embedding_info = dataset_dict["embedding_info"]
         self.embedding_info["RowIndex"] = np.arange(self.embedding_info.shape[0])
-        self.cell_info = self.cell_info.merge(self.embedding_info[["BinIndex", "RowIndex"]])
+        self.cell_info = self.cell_info[~np.isnan(self.cell_info["BinIndex"].to_numpy())]
+        self.cell_info = self.embedding_info[["BinIndex", "RowIndex"]].merge(self.cell_info, how="inner")
         self.neightbor_expand_size = dataset_dict["neightbor_expand_size"]
         self.main_bin_type_ratio = dataset_dict["main_bin_type_ratio"]
         self.embedding_resolution = dataset_dict["embedding_resolution"]
@@ -48,7 +49,8 @@ class RedeVizBinIndex(object):
     def compute_bin_cell_type_ratio_arr(self, cell_type: np.array, cell_info: pd.DataFrame, embedding_bin_num: int, cell_type_num: int):
         cell_type_index_dict = {ct: index for (index, ct) in enumerate(cell_type)}
         bin_cell_type_num = cell_info.groupby(["RowIndex", "CellType"]).size().reset_index(name='CellNum')
-        bin_cell_type_num["CellTypeIndex"] = np.array([cell_type_index_dict[ct] for ct in bin_cell_type_num["CellType"]])
+        bin_cell_type_num = bin_cell_type_num[bin_cell_type_num["CellNum"]>0]
+        bin_cell_type_num["CellTypeIndex"] = np.array([cell_type_index_dict[ct] for ct in bin_cell_type_num["CellType"].to_numpy()])
         bin_cell_type_num_arr = tr.sparse_coo_tensor(bin_cell_type_num[["RowIndex", "CellTypeIndex"]].to_numpy().T.astype(np.int64), bin_cell_type_num["CellNum"].to_numpy(), [embedding_bin_num, cell_type_num])
         bin_cell_type_num_arr = bin_cell_type_num_arr.coalesce()
         bin_cell_type_num_arr = bin_cell_type_num_arr.to_dense()
@@ -86,7 +88,7 @@ class RedeVizBinIndex(object):
         return cos_simi
 
 
-class RedeVizImgBinIndex(RedeVizBinIndex):
+class RedeVizImgNormBinIndex(RedeVizBinIndex):
     def __init__(self, f_pkl: str, cell_radius: int, device: str) -> None:
         with open(f_pkl, "rb") as f:
             dataset_dict = pickle.load(f)
@@ -101,7 +103,8 @@ class RedeVizImgBinIndex(RedeVizBinIndex):
         self.cell_info = dataset_dict["cell_info"]
         self.embedding_info = dataset_dict["embedding_info"]
         self.embedding_info["RowIndex"] = np.arange(self.embedding_info.shape[0])
-        self.cell_info = self.cell_info.merge(self.embedding_info[["BinIndex", "RowIndex"]])
+        self.cell_info = self.cell_info[~np.isnan(self.cell_info["BinIndex"].to_numpy())]
+        self.cell_info = self.embedding_info[["BinIndex", "RowIndex"]].merge(self.cell_info, how="inner")
         self.neightbor_expand_size = dataset_dict["neightbor_expand_size"]
         self.main_bin_type_ratio = dataset_dict["main_bin_type_ratio"]
         self.embedding_resolution = dataset_dict["embedding_resolution"]
@@ -169,7 +172,64 @@ class RedeVizImgBinIndex(RedeVizBinIndex):
             simi_li.append(tmp_simi)
         simi_arr = tr.stack(simi_li, -1).unsqueeze(0)
         return simi_arr
+
+
+class RedeVizImgBinIndex(RedeVizBinIndex):
+    def __init__(self, f_pkl: str, cell_radius: int, device: str) -> None:
+        with open(f_pkl, "rb") as f:
+            dataset_dict = pickle.load(f)
+        self.device = device
+        self.bin_size = dataset_dict["bin_size"]
+        self.bin_num = len(self.bin_size)
+        self.max_bin_size = max(self.bin_size)
+        self.cell_radius = cell_radius
+        self.gene_name = dataset_dict["gene_name"]
+        self.gene_num = len(self.gene_name)
+        self.cell_info = dataset_dict["cell_info"]
+        self.embedding_info = dataset_dict["embedding_info"]
+        self.embedding_info["RowIndex"] = np.arange(self.embedding_info.shape[0])
+        self.cell_info = self.cell_info[~np.isnan(self.cell_info["BinIndex"].to_numpy())]
+        self.cell_info = self.embedding_info[["BinIndex", "RowIndex"]].merge(self.cell_info, how="inner")
+        self.neightbor_expand_size = dataset_dict["neightbor_expand_size"]
+        self.main_bin_type_ratio = dataset_dict["main_bin_type_ratio"]
+        self.embedding_resolution = dataset_dict["embedding_resolution"]
+        self.norm_embedding_bin_pct = dataset_dict["norm_embedding_bin_pct"].to(device)
+        self.quantile_cos_simi = tr.stack(dataset_dict["quantile_simi"], 0).to(device)
+        self.quantile_cos_simi = tr.permute(self.quantile_cos_simi, [2, 0, 3, 1])  # EmbeddingBinIndex, BinSize, Pct, MixRatio
+        self.quantile_cos_simi = tr.concat([self.quantile_cos_simi, tr.unsqueeze(self.quantile_cos_simi[-1, :, :, :], 0)], 0)
+        self.neightbor_max_cos_simi_ratio = tr.stack(dataset_dict["neightbor_max_simi_ratio"], 0).to(device)
+        self.neightbor_max_cos_simi_ratio = tr.concat([self.neightbor_max_cos_simi_ratio, tr.unsqueeze(self.neightbor_max_cos_simi_ratio[:, :, :, -1, :], -2)], -2)
+        self.neightbor_max_cos_simi_ratio = tr.permute(self.neightbor_max_cos_simi_ratio, [0, 1, 3, 4, 2])  # BinSize, MixRatio, EmbeddingBinLabel, MaxCosSimiEmbeddingBin, ExpandSize
+        neightbor_max_cos_simi_max_score = tr.unsqueeze(tr.max(self.neightbor_max_cos_simi_ratio, -2)[0], -2)
+        self.neightbor_max_cos_simi_score = self.neightbor_max_cos_simi_ratio / neightbor_max_cos_simi_max_score
+        self.cell_type = np.sort(np.unique(self.cell_info["CellType"].to_numpy()))
+        self.cell_type_num = len(self.cell_type)
+        self.embedding_bin_num = self.embedding_info.shape[0]
+        self.simi_model_li = list()
+        for state_dict in dataset_dict["simi_model"]:
+            model = ImgStEmbSimiModel(self.gene_num, self.embedding_bin_num)
+            model.load_state_dict(state_dict)
+            model = model.to(self.device)
+            self.simi_model_li.append(model)
+        self.bin_cell_type_ratio = self.compute_bin_cell_type_ratio_arr(self.cell_type, self.cell_info, self.embedding_bin_num, self.cell_type_num).to(device)
+        self.bin_dist = self.compute_bin_dist(self.embedding_info).to(device)
+
+    def compute_cos_simi(self, spot_data):
+        spot_data = spot_data.coalesce()
+        simi_li = list()
+        for bin_size, simi_model in zip(self.bin_size, self.simi_model_li):
+            expand_size = int((bin_size - 1) / 2)
+            spot_data = spot_data.type(tr.float32).to(self.norm_embedding_bin_pct.device)
+            smooth_spot_arr = SparseSumPooling2DV2(spot_data, expand_size, expand_size)
+            smooth_spot_arr = smooth_spot_arr.to_dense()
+            flat_smooth_spot_arr = smooth_spot_arr.reshape([-1, self.gene_num])
+            flat_simi_arr = simi_model(flat_smooth_spot_arr) # [N, bin]
+            tmp_simi = flat_simi_arr.reshape([spot_data.shape[1], spot_data.shape[2], self.embedding_bin_num])
+            simi_li.append(tmp_simi)
+        simi_arr = tr.stack(simi_li, -1).unsqueeze(0)
+        return simi_arr
     
+
 def load_spot_data(fname: str, x_label: str, y_label: str, gene_label: str, UMI_label: str, max_expr_ratio: float, dataset):
     df = pd.read_csv(fname, sep="\t")
     gene2index = {gid: index for index, gid in enumerate(dataset.gene_name)}
