@@ -29,6 +29,7 @@ class SpatialSpace(object):
     def __init__(self, f_spot, keep_other, denoise, min_spot_num) -> None:
         spot_df = pd.read_csv(f_spot, sep="\t")
         spot_df = spot_df[spot_df["RefCellTypeScore"] > spot_df["BackgroundScore"]]
+        spot_df = spot_df[spot_df["ArgMaxCellType"]!="Other"]
         self.keep_other = keep_other
         no_bg_spot = spot_df[spot_df["LabelTransfer"]!="Background"]
         if denoise:

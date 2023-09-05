@@ -2,6 +2,7 @@ from redeviz.pretreatment.spot2bin import spot2bin_main
 from redeviz.pretreatment.point2bin import point2bin_main
 from redeviz.pretreatment.infer_spot_expr import infer_spot_expr_main
 from redeviz.pretreatment.filter_scRNA import filter_scRNA_main
+from redeviz.pretreatment.emb_info_select_gene import emb_info_select_gene_main
 
 def parse_pretreatment_args(pretreatment_subparser):
     parser_spot2bin = pretreatment_subparser.add_parser('spot2bin', help='Spot binning')
@@ -69,3 +70,16 @@ def parse_pretreatment_args(pretreatment_subparser):
                         metavar="min_UMI_per_cell", required=True)
     parser_filter_scRNA.add_argument("--output", type=str, dest="output",
                         metavar="output.h5ad", required=True, help="scRNA-seq data with H5AD format")
+
+    parser_emb_info_select_gene = pretreatment_subparser.add_parser('emb_info_select_gene', help='Select gene with embedding data')
+    parser_emb_info_select_gene.set_defaults(func=emb_info_select_gene_main)
+    parser_emb_info_select_gene.add_argument("--input", type=str, dest="input",
+                        metavar="emb_info.pkl", required=True, help="Embedding information with pkl format")
+    parser_emb_info_select_gene.add_argument("--gene-list", type=str, dest="gene_li",
+                        metavar="gene_li.txt", required=True)
+    parser_emb_info_select_gene.add_argument("--min-UMI-per-bin", type=int, dest="min_UMI_num",
+                        metavar="min_UMI_num", default=100, required=True)
+    parser_emb_info_select_gene.add_argument("--min-gene-per-bin", type=int, dest="min_gene_num",
+                        metavar="min_gene_num", default=20, required=True)
+    parser_emb_info_select_gene.add_argument("--output", type=str, dest="output",
+                        metavar="output.pkl", required=True)

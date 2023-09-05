@@ -269,6 +269,12 @@ class RedeVizBinModel(object):
             tr.cuda.empty_cache()
         return new_label_arr
     
+    def update_label(self, label_arr, neighbor_close_label_fct, signal_cov_score_fct, is_in_ref_score_fct, argmax_prob_score_fct, ave_bin_dist_cutoff, embedding_expand_size):
+        score_arr = self.evaluate_score_new(label_arr, neighbor_close_label_fct, signal_cov_score_fct, is_in_ref_score_fct, argmax_prob_score_fct, ave_bin_dist_cutoff, embedding_expand_size)
+        label_arr = tr.argmax(score_arr, -1)
+        label_arr = tr.unsqueeze(label_arr, -1)
+        return label_arr
+
     def compute_all(self, mid_signal_cutoff=1.0, neighbor_close_label_fct=0.2, signal_cov_score_fct=1.0, is_in_ref_score_fct=1.0, argmax_prob_score_fct=1.0, ave_bin_dist_cutoff=4, embedding_expand_size=3, update_num=2):
         logging.debug(f"Initiate label ...")
         self.compute_average_signal()
@@ -287,9 +293,7 @@ class RedeVizBinModel(object):
 
         for index in range(update_num):
             logging.debug(f"Update: {index+1} / {update_num}")
-            score_arr = self.evaluate_score_new(label_arr, neighbor_close_label_fct, signal_cov_score_fct, is_in_ref_score_fct, argmax_prob_score_fct, ave_bin_dist_cutoff, embedding_expand_size)
-            label_arr = tr.argmax(score_arr, -1)
-            label_arr = tr.unsqueeze(label_arr, -1)
+            label_arr = self.update_label(label_arr, neighbor_close_label_fct, signal_cov_score_fct, is_in_ref_score_fct, argmax_prob_score_fct, ave_bin_dist_cutoff, embedding_expand_size)
             label_arr = self.adjust_label_arr(label_arr)
 
         self.label_arr = label_arr
@@ -367,7 +371,7 @@ class RedeVizImgBinModel(RedeVizBinModel):
         self.max_cos_simi_arr, self.argmax_cos_simi_arr = tr.max(log2SNR_arr, 3)
         self.log2SNR_arr = log2SNR_arr
 
-    def init_label_arr_worker(self, low_expr_cutoff=0.3, log2SNR_cutoff=1.0):
+    def init_label_arr_worker(self, low_expr_cutoff=0.3, log2SNR_cutoff=0):
         total_log2SNR_arr = tr.sum(self.log2SNR_arr, -1)
         ave_expr_arr = self.ave_expr_arr
         is_low_expr = ave_expr_arr<low_expr_cutoff
@@ -382,11 +386,13 @@ class RedeVizImgBinModel(RedeVizBinModel):
         low_cos_simi_arr = tr.all(self.max_cos_simi_arr < min_cos_simi_arr, -1, keepdim=True)
         max_arr, which_max_arr = tr.max(total_log2SNR_arr, -1, keepdim=True)
         which_max_arr[low_cos_simi_arr] = self.dataset.embedding_bin_num
+        for zero_bin_index in self.dataset.zero_bin_index:
+            which_max_arr[which_max_arr==zero_bin_index] = self.dataset.embedding_bin_num
         which_max_arr[max_arr<=log2SNR_cutoff] = self.dataset.embedding_bin_num
         which_max_arr[is_low_expr] = self.dataset.embedding_bin_num + 1
         return which_max_arr
     
-    def compute_is_in_ref_cell_score(self, all_state_mid_label_arr: tr.Tensor,  all_state_mid_cos_simi_arr: tr.Tensor, log2SNR_cutoff=1):
+    def compute_is_in_ref_cell_score(self, all_state_mid_label_arr: tr.Tensor,  all_state_mid_cos_simi_arr: tr.Tensor, log2SNR_cutoff=0):
         score = all_state_mid_cos_simi_arr - log2SNR_cutoff
         is_not_bg = (all_state_mid_label_arr != (self.dataset.embedding_bin_num+1)).type(tr.float32)
         score = score * is_not_bg
@@ -395,7 +401,14 @@ class RedeVizImgBinModel(RedeVizBinModel):
         score_arr = tr.mean(score, -1)
         return score_arr
 
-
+    def update_label(self, label_arr, neighbor_close_label_fct, signal_cov_score_fct, is_in_ref_score_fct, argmax_prob_score_fct, ave_bin_dist_cutoff, embedding_expand_size):
+        score_arr = self.evaluate_score_new(label_arr, neighbor_close_label_fct, signal_cov_score_fct, is_in_ref_score_fct, argmax_prob_score_fct, ave_bin_dist_cutoff, embedding_expand_size)
+        label_arr = tr.argmax(score_arr, -1)
+        label_arr = tr.unsqueeze(label_arr, -1)
+        for zero_bin_index in self.dataset.zero_bin_index:
+            label_arr[label_arr==zero_bin_index] = self.dataset.embedding_bin_num
+        return label_arr
+    
     def iter_result(self, skip_bg):
         if self.score_arr is not None:
             logging.debug("Interpret results")
@@ -439,9 +452,14 @@ class RedeVizImgBinModel(RedeVizBinModel):
                         continue
                 elif tmp_emb_score_arr < tmp_other_score:
                     LabelTransfer = "Other"
-                if embedding_state in self.dataset.zero_bin_index:
+                if tmp_bin_index in self.dataset.zero_bin_index:
+                    tmp_emb1 = np.nan
+                    tmp_emb2 = np.nan
+                    tmp_emb3 = np.nan
+                    tmp_bin_index = np.nan
                     if LabelTransfer != "Background":
                         LabelTransfer = "Other"
+                    tmp_emb_cell_type = "Other"
                 res = [
                     x_index, y_index, tmp_res_bin_index, 
                     tmp_emb1*self.dataset.embedding_resolution, tmp_emb2*self.dataset.embedding_resolution, tmp_emb3*self.dataset.embedding_resolution, 

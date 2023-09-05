@@ -224,8 +224,13 @@ def build_embedding_info_main(args):
     logging.info(f"Loading single cell RNA-seq data from {f_in} ...")
     sce = sc.read_h5ad(f_in)
 
+    if gene_id_label is None:
+        gene_name_arr = sce.var_names
+    else:
+        gene_name_arr = sce.var[gene_id_label].to_numpy()
+
     # Remove genes in black list
-    is_in_gene_blacklist = np.array([x in gene_blacklist for x in sce.var[gene_id_label]])
+    is_in_gene_blacklist = np.array([x in gene_blacklist for x in gene_name_arr])
     sce = sce[:, ~is_in_gene_blacklist]
 
     # Remove high expressed genes
@@ -246,7 +251,11 @@ def build_embedding_info_main(args):
         gene_cnt = scipy.sparse.csr_matrix(gene_cnt)
     gene_cnt = csr_mat2sparse_tensor(gene_cnt)
     gene_cnt = gene_cnt.type(tr.int64)
-    gene_name_arr = list(sce.var[gene_id_label].to_numpy())
+
+    if gene_id_label is None:
+        gene_name_arr = list(sce.var_names)
+    else:
+        gene_name_arr = list(sce.var[gene_id_label].to_numpy())
 
     logging.info(f"Computing embedding ...")
     cell_info_df = proprocess_SCE_HVG_embedding(sce, cell_type_label, embedding_resolution, no_HVG, embedding, embedding_dim, n_neighbors)
@@ -332,6 +341,7 @@ def build_embedding_index_main(args):
         neightbor_expand_size = np.arange(int(embedding_resolution*3))
         cell_info_df = embedding_dict["cell_info"]
         select_embedding_info = embedding_dict["embedding_info"]
+        select_embedding_info["RowIndex"] = np.arange(select_embedding_info.shape[0])
 
         gene_num = len(gene_name_arr)
         gene_bin_cnt = gene_bin_cnt.to(device)
@@ -350,7 +360,7 @@ def build_embedding_index_main(args):
 
 
         logging.info(f"Simulating spatial transcriptomics data and compute prior probability ...")
-        neighbor_bin_expand_li = [compute_neighbor_bin_loc(select_embedding_info, expand_size) for expand_size in neightbor_expand_size]
+        neighbor_bin_expand_li = [compute_neighbor_bin_loc(select_embedding_info, expand_size, bin_index_name="RowIndex") for expand_size in neightbor_expand_size]
         neighbor_bin_expand_arr = tr.stack(neighbor_bin_expand_li, 0)
         neighbor_bin_expand_arr = neighbor_bin_expand_arr.to(device)
         bin_quantile_cos_simi_li = list()

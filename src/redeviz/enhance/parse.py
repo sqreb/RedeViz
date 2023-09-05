@@ -22,7 +22,7 @@ def parse_enhance_args(enhance_subparser):
     parser_pretreat.add_argument("--cell-type-label", type=str, dest="cell_type_label",
                         metavar="cell_type_label", required=True, help="Cell type label in scRNA-seq dataset.")
     parser_pretreat.add_argument("--gene-id-label", type=str, dest="gene_id_label",
-                        metavar="gene_id_label", required=True, help="Gene ID label in scRNA-seq dataset.")
+                        metavar="gene_id_label", required=False, default=None, help="Gene ID label in scRNA-seq dataset of variable dataframe.")
     parser_pretreat.add_argument("--embedding", type=str, dest="embedding",
                         metavar="embedding", required=False, default="tSNE", choices=["tSNE", "UMAP"], 
                         help="Embedding method [tSNE, UMAP] (default=tSNE)")

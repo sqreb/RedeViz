@@ -116,6 +116,7 @@ def imputation_main(args):
     if args.denoise:
         nbg_pred_df = filter_pred_df(nbg_pred_df, min_spot_in_region=args.min_spot_num)
     
+    nbg_pred_df = nbg_pred_df[nbg_pred_df["ArgMaxCellType"]!="Other"]
     if not keep_other:
         nbg_pred_df = nbg_pred_df[nbg_pred_df["LabelTransfer"]!="Other"]
     embedding_index_df = pd.DataFrame(embedding_index_mat, columns=["Embedding1", "Embedding2", "Embedding3"])
