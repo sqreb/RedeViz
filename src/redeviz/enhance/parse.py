@@ -1,18 +1,15 @@
 from redeviz.enhance.index import build_embedding_info_main, build_embedding_index_main
 from redeviz.enhance.enhance import enhance_main
-from redeviz.enhance.image_index import build_embedding_image_index_main, build_embedding_image_norm_index_main
-from redeviz.enhance.img_enhance import img_enhance_main, img_norm_enhance_main
+from redeviz.enhance.image_index import build_embedding_image_index_main
+from redeviz.enhance.img_enhance import img_enhance_main
 import pickle
 
 def run_enhance_main(args):
     with open(args.index, "rb") as f:
         dataset_dict = pickle.load(f)
     if "index_type" in dataset_dict.keys():
-        if dataset_dict["index_type"] == "Image":
+        if dataset_dict["index_type"] in ["Image", "ImageNorm"]:
             img_enhance_main(args)
-            return None
-        elif dataset_dict["index_type"] == "ImageNorm":
-            img_norm_enhance_main(args)
             return None
     enhance_main(args)
 
@@ -72,24 +69,8 @@ def parse_enhance_args(enhance_subparser):
                         metavar="device_name", required=False, default=None, 
                         help="Device name (default=auto)")
     
-    parser_img_index = enhance_subparser.add_parser('build_img', help='Build image index help')
-    parser_img_index.set_defaults(func=build_embedding_image_index_main)
-    parser_img_index.add_argument("-i", "--input", type=str, dest="input",
-                        metavar="pretreat.pkl", required=True, help="Pretreat file.")
-    parser_img_index.add_argument("--select-gene", type=str, dest="select_gene",
-                        metavar="select_gene.txt", required=True, help="Selected gene")
-    parser_img_index.add_argument("--bin-size", nargs="*", type=int, dest="bin_size",
-                        metavar="bin_size", required=False, default=[12, 18, 21], help="Bin size (default=[12, 18, 21])")
-    parser_img_index.add_argument("--UMI-per-spot", type=float, dest="UMI_per_spot",
-                        metavar="UMI_per_spot", required=False, default=0.5, help="UMI per spot (default=0.5)")
-    parser_img_index.add_argument("-o", "--output", type=str, dest="output",
-                        metavar="index.pkl", required=True, help="Output file")
-    parser_img_index.add_argument("--device-name", type=str, dest="device_name",
-                        metavar="device_name", required=False, default=None, 
-                        help="Device name (default=auto)")
-    
-    parser_img_norm_index = enhance_subparser.add_parser('build_img_norm', help='Build image index help')
-    parser_img_norm_index.set_defaults(func=build_embedding_image_norm_index_main)
+    parser_img_norm_index = enhance_subparser.add_parser('build_img', help='Build image index help')
+    parser_img_norm_index.set_defaults(func=build_embedding_image_index_main)
     parser_img_norm_index.add_argument("-i", "--input", type=str, dest="input",
                         metavar="pretreat.pkl", required=True, help="Pretreat file.")
     parser_img_norm_index.add_argument("--select-gene", type=str, dest="select_gene",

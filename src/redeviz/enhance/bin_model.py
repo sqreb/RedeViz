@@ -296,7 +296,6 @@ class RedeVizBinModel(object):
         self.generate_all_state_by_cos_simi(use_other=True)
         self.score_arr = self.evaluate_score_new(label_arr, neighbor_close_label_fct, signal_cov_score_fct, is_in_ref_score_fct, argmax_prob_score_fct, ave_bin_dist_cutoff, embedding_expand_size)
 
-
     def iter_result(self, skip_bg):
         if self.score_arr is not None:
             logging.debug("Interpret results")
@@ -349,11 +348,103 @@ class RedeVizBinModel(object):
 
 
 class RedeVizImgBinModel(RedeVizBinModel):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.bg_simi_arr = None
+        self.delta_simi_arr = None
+
     def compute_cos_simi_worker(self):
         delta_expand_size = self.max_bin_expand_size
-        simi_arr = self.dataset.compute_cos_simi(self.spot_data)
+        simi_arr, bg_simi_arr = self.dataset.compute_cos_simi(self.spot_data)
         simi_arr = simi_arr[:, delta_expand_size: (-1*delta_expand_size), delta_expand_size: (-1*delta_expand_size), :, :]
-        return simi_arr
+        bg_simi_arr = bg_simi_arr[:, delta_expand_size: (-1*delta_expand_size), delta_expand_size: (-1*delta_expand_size), :, :]
+        return simi_arr, bg_simi_arr
     
-    def compute_is_in_ref_cell_score(self, all_state_mid_label_arr: tr.Tensor,  all_state_mid_cos_simi_arr: tr.Tensor, batch_effect_fct=1):
-        return super().compute_is_in_ref_cell_score(all_state_mid_label_arr, all_state_mid_cos_simi_arr, batch_effect_fct)
+    def compute_cos_simi(self) -> None:
+        simi_arr, bg_simi_arr = self.compute_cos_simi_worker()
+        log2SNR_arr = simi_arr - bg_simi_arr
+        self.cos_simi_arr = log2SNR_arr
+        self.max_cos_simi_arr, self.argmax_cos_simi_arr = tr.max(log2SNR_arr, 3)
+        self.log2SNR_arr = log2SNR_arr
+
+    def init_label_arr_worker(self, low_expr_cutoff=0.3, log2SNR_cutoff=1.0):
+        total_log2SNR_arr = tr.sum(self.log2SNR_arr, -1)
+        ave_expr_arr = self.ave_expr_arr
+        is_low_expr = ave_expr_arr<low_expr_cutoff
+        min_cos_simi_cutoff = tr.min(self.dataset.quantile_cos_simi[:, :, 1, :], 2)[0]
+        flat_argmax_cos_simi_arr = tr.reshape(self.argmax_cos_simi_arr, [(self.x_range-2*self.max_bin_expand_size) * (self.y_range-2*self.max_bin_expand_size), self.dataset.bin_num])
+        sp_flat_argmax_cos_simi_arr = (flat_argmax_cos_simi_arr+1).to_sparse_coo()
+        sp_flat_argmax_cos_simi_arr_indices = sp_flat_argmax_cos_simi_arr.indices()
+        sp_flat_argmax_cos_simi_arr_values = sp_flat_argmax_cos_simi_arr.values() - 1
+        min_cos_simi_indices = tr.stack([sp_flat_argmax_cos_simi_arr_values, sp_flat_argmax_cos_simi_arr_indices[1, :]], -1)
+        min_cos_simi_values = min_cos_simi_cutoff[list(min_cos_simi_indices.T)]
+        min_cos_simi_arr = tr.reshape(min_cos_simi_values, [1, self.x_range-2*self.max_bin_expand_size, self.y_range-2*self.max_bin_expand_size, self.dataset.bin_num])
+        low_cos_simi_arr = tr.all(self.max_cos_simi_arr < min_cos_simi_arr, -1, keepdim=True)
+        max_arr, which_max_arr = tr.max(total_log2SNR_arr, -1, keepdim=True)
+        which_max_arr[low_cos_simi_arr] = self.dataset.embedding_bin_num
+        which_max_arr[max_arr<=log2SNR_cutoff] = self.dataset.embedding_bin_num
+        which_max_arr[is_low_expr] = self.dataset.embedding_bin_num + 1
+        return which_max_arr
+    
+    def compute_is_in_ref_cell_score(self, all_state_mid_label_arr: tr.Tensor,  all_state_mid_cos_simi_arr: tr.Tensor, log2SNR_cutoff=1):
+        score = all_state_mid_cos_simi_arr - log2SNR_cutoff
+        is_not_bg = (all_state_mid_label_arr != (self.dataset.embedding_bin_num+1)).type(tr.float32)
+        score = score * is_not_bg
+        is_out_class = (all_state_mid_label_arr == self.dataset.embedding_bin_num).type(tr.float32)
+        score = score * (is_out_class - 0.5) * -2
+        score_arr = tr.mean(score, -1)
+        return score_arr
+
+
+    def iter_result(self, skip_bg):
+        if self.score_arr is not None:
+            logging.debug("Interpret results")
+            other_score_arr = self.score_arr[0, :, :, self.dataset.embedding_bin_num].to("cpu").numpy()
+            bg_score_arr = self.score_arr[0, :, :, self.dataset.embedding_bin_num+1].to("cpu").numpy()
+            argmax_emb_score_arr, argmax_emb_arr = tr.max(self.score_arr[0, :, :, :self.dataset.embedding_bin_num].to("cpu"), -1)
+            argmax_emb_score_arr = argmax_emb_score_arr.numpy()
+            argmax_emb_arr = argmax_emb_arr.numpy()
+
+            sp_label_arr = (self.label_arr+1).to_sparse_coo().to("cpu")
+            pos_arr = sp_label_arr.indices().T.numpy()
+            label_arr = sp_label_arr.values().numpy() - 1
+            embedding_info = self.dataset.embedding_info[["Embedding1BinIndex", "Embedding2BinIndex", "Embedding3BinIndex", "MainCellType"]].to_numpy()
+            embedding_info = np.insert(embedding_info, self.dataset.embedding_bin_num, [np.nan, np.nan, np.nan, "Other"], 0)
+            embedding_info = np.insert(embedding_info, self.dataset.embedding_bin_num+1, [np.nan, np.nan, np.nan, "Background"], 0)
+            label_embedding_info = embedding_info[label_arr, :]
+            cell_type_li = embedding_info[:, 3]
+            emb1_arr = self.dataset.embedding_info["Embedding1BinIndex"].to_numpy()
+            emb2_arr = self.dataset.embedding_info["Embedding2BinIndex"].to_numpy()
+            emb3_arr = self.dataset.embedding_info["Embedding3BinIndex"].to_numpy()
+            bin_index_li = self.dataset.embedding_info["BinIndex"].to_numpy()
+            for embedding_state, (_, x_index, y_index, _), (embedding1_bin_index, embedding2_bin_index, embedding3_bin_index, LabelTransfer)  in zip(label_arr, list(pos_arr), list(label_embedding_info)):
+                if skip_bg and (LabelTransfer == "Background"):
+                        continue
+                tmp_other_score = other_score_arr[x_index, y_index]
+                tmp_bg_score = bg_score_arr[x_index, y_index]
+                tmp_bin_index = argmax_emb_arr[x_index, y_index]
+                tmp_emb1 = emb1_arr[tmp_bin_index]
+                tmp_emb2 = emb2_arr[tmp_bin_index]
+                tmp_emb3 = emb3_arr[tmp_bin_index]
+                tmp_res_bin_index = bin_index_li[tmp_bin_index]
+                if LabelTransfer in ["Background", "Other"]:
+                    tmp_emb_score_arr = argmax_emb_score_arr[x_index, y_index]
+                    tmp_emb_cell_type = cell_type_li[argmax_emb_arr[x_index, y_index]]
+                else:
+                    tmp_emb_score_arr = self.score_arr[0, x_index, y_index, embedding_state].to("cpu").numpy()
+                    tmp_emb_cell_type = LabelTransfer
+                if tmp_emb_score_arr < tmp_bg_score:
+                    LabelTransfer = "Background"
+                    if skip_bg:
+                        continue
+                elif tmp_emb_score_arr < tmp_other_score:
+                    LabelTransfer = "Other"
+                if embedding_state in self.dataset.zero_bin_index:
+                    if LabelTransfer != "Background":
+                        LabelTransfer = "Other"
+                res = [
+                    x_index, y_index, tmp_res_bin_index, 
+                    tmp_emb1*self.dataset.embedding_resolution, tmp_emb2*self.dataset.embedding_resolution, tmp_emb3*self.dataset.embedding_resolution, 
+                    LabelTransfer, tmp_emb_cell_type, tmp_emb_score_arr, tmp_other_score, tmp_bg_score
+                    ]
+                yield res

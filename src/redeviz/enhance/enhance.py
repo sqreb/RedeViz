@@ -60,7 +60,7 @@ def enhance_main(args):
         if args.slice_x is not None:
             assert args.slice_y
             _, x_min, y_min, _ = tr.min(spot_data.indices(), 1)[0].numpy()
-            if (x_range <= args.slice_x[0]) | (y_range <= args.slice_y[0]) | (x_min <= args.slice_x[1]) | (y_min <= args.slice_y[1]):
+            if (x_range <= args.slice_x[0]) | (y_range <= args.slice_y[0]) | (x_min >= args.slice_x[1]) | (y_min >= args.slice_y[1]):
                 is_empty = True
             else:
                 args.slice_x[1] = min(args.slice_x[1], x_range)
