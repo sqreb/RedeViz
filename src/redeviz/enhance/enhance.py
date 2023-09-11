@@ -27,7 +27,7 @@ def div_spot(spot_data, total_UMI_arr, expand_size, step=256):
             tmp_total_UMI_arr = expand_UMI_arr[:, x_start:(x_end+2*expand_size), y_start:(y_end+2*expand_size), :]
             yield (tmp_spot_data, tmp_total_UMI_arr, x_start, y_start)
 
-def get_ave_smooth_cov(total_UMI_arr: tr.Tensor, expand_size=10, denoise_cutoff=0.2):
+def get_ave_smooth_cov(total_UMI_arr: tr.Tensor, expand_size=10, denoise_cutoff=0.15):
     total_umi = total_UMI_arr.to_sparse_coo()
     new_indices = total_umi.indices() / expand_size
     new_indices = new_indices.type(tr.int64)

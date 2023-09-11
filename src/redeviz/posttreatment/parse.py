@@ -17,6 +17,7 @@ def parse_posttreatment_args(posttreatment_subparser):
     parser_plot_phenotype.add_argument("--keep-other", dest="keep_other", action="store_true", help="Force to impute other cell types")
     parser_plot_phenotype.add_argument("--min-denoise-spot-num", type=int, dest="min_spot_num", default=200)
     parser_plot_phenotype.add_argument("--denoise", dest="denoise", action="store_true", help="Remove scattered pixel")
+    parser_plot_phenotype.add_argument("--white-bg", dest="white_bg", action="store_true")
 
     parser_plot_cell_type = posttreatment_subparser.add_parser('plot_cell_type', help='Cell type visualization.')
     parser_plot_cell_type.set_defaults(func=plot_cell_type_main)
@@ -29,14 +30,15 @@ def parse_posttreatment_args(posttreatment_subparser):
     parser_plot_cell_type.add_argument("--keep-other", dest="keep_other", action="store_true", help="Force to impute other cell types")
     parser_plot_cell_type.add_argument("--min-denoise-spot-num", type=int, dest="min_spot_num", default=200)
     parser_plot_cell_type.add_argument("--denoise", dest="denoise", action="store_true", help="Remove scattered pixel")
-    
+    parser_plot_cell_type.add_argument("--white-bg", dest="white_bg", action="store_true")
+
     parser_impute = posttreatment_subparser.add_parser('impute', help='Gene expression imputation')
     impute_subparsers = parser_impute.add_subparsers(help='sub-command help')
     parser_build = impute_subparsers.add_parser('build', help='Build imputation index.')
     parser_build.set_defaults(func=imputation_build_index_main)
     parser_build.add_argument("--index", type=str, dest="index", metavar="index.pkl", required=True, help="Embedding information with pkl format")
     parser_build.add_argument("--sce", type=str, dest="sce", metavar="sce.h5ad", required=True, help="scRNA-seq count matrix with H5AD format")
-    parser_build.add_argument("--gene-name-label", type=str, dest="gene_name_label", metavar="gene_name_label", required=True, help="Gene name label in SCE file")
+    parser_build.add_argument("--gene-name-label", type=str, dest="gene_name_label", metavar="gene_name_label", required=False, default=None, help="Gene name label in SCE file")
     parser_build.add_argument("--embedding-smooth-sigma", type=float, dest="embedding_smooth_sigma", metavar="embedding_smooth_sigma", required=False, default=None, help="Embedding smooth sigma")
     parser_build.add_argument("--output", type=str, dest="output", metavar="imputation.pkl", required=True, help="Imputation index")
 

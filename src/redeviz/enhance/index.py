@@ -7,8 +7,9 @@ import scipy
 import pickle
 from redeviz.enhance.utils import csr_mat2sparse_tensor, sparse_cnt_log_norm, sparse_cnt_mat2pct, norm_sparse_cnt_mat, select_device
 import logging
+from scipy.sparse import load_npz, coo_matrix
 
-def proprocess_SCE_HVG_embedding(sce: sc.AnnData, cell_type_label: str, embedding_resolution: float, no_HVG: bool, embedding="tSNE", embedding_dim=2, n_neighbors=15):
+def proprocess_SCE_HVG_embedding(sce: sc.AnnData, cell_type_label: str, embedding_resolution: float, no_HVG: bool, embedding="tSNE", embedding_dim=2, n_neighbors=15, leiden_resolution=1):
     sc.pp.normalize_total(sce, target_sum=1e4)
     sc.pp.log1p(sce)
     if no_HVG:
@@ -21,6 +22,7 @@ def proprocess_SCE_HVG_embedding(sce: sc.AnnData, cell_type_label: str, embeddin
     sc.tl.tsne(HVG_sce)
     sc.pp.neighbors(HVG_sce, n_neighbors=n_neighbors)
     sc.tl.umap(HVG_sce, n_components=embedding_dim)
+    sc.tl.leiden(HVG_sce, resolution=leiden_resolution)
 
     if embedding == "tSNE":
         cell_info_df = pd.DataFrame({
@@ -125,6 +127,7 @@ def compute_neighbor_bin_loc(bin_info: pd.DataFrame, expand_size: float, bin_ind
     loc_arr = loc_arr.to_dense()
     return loc_arr
 
+
 def compute_simu_info_worker(pct_arr, norm_method, UMI_per_bin, rand_pct_arr, main_bin_type_ratio, t_norm_gene_bin_cnt, quantile_arr, neighbor_bin_expand_arr, N):
     assert norm_method in ["None", "log"]
     mu_simi = (pct_arr*main_bin_type_ratio + (1-main_bin_type_ratio) * rand_pct_arr) * UMI_per_bin
@@ -137,7 +140,7 @@ def compute_simu_info_worker(pct_arr, norm_method, UMI_per_bin, rand_pct_arr, ma
     sort_max_cos_simi, _ = tr.sort(tr.reshape(max_cos_simi, [-1]))
     quantile_cos_simi = tr.quantile(sort_max_cos_simi, quantile_arr, 0)
     bin_num = t_norm_gene_bin_cnt.shape[1]
-    max_simi, arg_max_simi = tr.max(cos_simi, 0)
+    max_simi, arg_max_simi = tr.max(cos_simi, 1)
     arg_max_simi_ratio = tr.bincount(arg_max_simi, minlength=bin_num) / N
     neightbor_max_cos_simi_ratio = tr.matmul(neighbor_bin_expand_arr.reshape([-1, bin_num]).type(tr.float32), arg_max_simi_ratio.reshape([-1, 1])).reshape([-1, bin_num])
     return quantile_cos_simi, neightbor_max_cos_simi_ratio
@@ -181,15 +184,43 @@ def compute_simu_info_dense_arr(dense_gene_bin_cnt, dense_t_norm_gene_bin_cnt, n
     neightbor_max_cos_simi_ratio_arr = tr.stack(neightbor_max_cos_simi_ratio_li, 1)
     return quantile_cos_simi_arr, neightbor_max_cos_simi_ratio_arr
 
-def build_embedding_info_main(args):
-    f_in = args.input
+
+def spot2sce(f_spot, f_mask, x_index_label, y_index_label, UMI_label, gene_id_label):
+    spot_df = pd.read_csv(f_spot, sep="\t")
+    mask_arr = load_npz(f_mask)
+    cell_info_df = pd.DataFrame({
+        x_index_label: mask_arr.row,
+        y_index_label: mask_arr.col,
+        "CellIndex": mask_arr.data
+    })
+    cell_center_info = cell_info_df.groupby(["CellIndex"])[x_index_label, y_index_label].agg(np.mean).reset_index()
+    cell_center_info = cell_center_info.merge(
+        cell_info_df.groupby(["CellIndex"]).size().reset_index(name="SpotNum")
+    )
+    cell_info_df = cell_info_df.merge(spot_df)
+    cell_info_df = cell_info_df.groupby(["CellIndex", gene_id_label])[UMI_label].agg(np.sum).reset_index(name=UMI_label)
+    gene_li = sorted(cell_info_df[gene_id_label].unique())
+    gene2index = {g: ct for (ct, g) in enumerate(gene_li)}
+    cell_info_df["GeneIndex"] = [gene2index[c] for c in cell_info_df[gene_id_label].to_numpy()]
+    gene_num = len(gene_li)
+    max_cell_index = cell_info_df["CellIndex"].max()
+    cell_gene_cnt_arr = coo_matrix((cell_info_df[UMI_label].to_numpy(), (cell_info_df["CellIndex"].to_numpy(), cell_info_df["GeneIndex"].to_numpy())), (max_cell_index+1, gene_num)).toarray()
+    nzo_index = cell_gene_cnt_arr.sum(-1) > 0
+    cell_gene_cnt_arr = cell_gene_cnt_arr[nzo_index, :]
+    assert np.all(np.where(nzo_index)[0] == cell_center_info["CellIndex"].to_numpy())
+    sce = sc.AnnData(X=cell_gene_cnt_arr, obs=cell_center_info, var=pd.DataFrame({gene_id_label: gene_li}))
+    sce.var_names = gene_li
+    return sce
+
+
+def build_embedding_info_worker(sce, args, cell_type_label):
     f_out = args.output
-    cell_type_label = args.cell_type_label
     gene_id_label = args.gene_id_label
     embedding_resolution = args.embedding_resolution
     embedding = args.embedding
     embedding_dim = args.embedding_dim
     n_neighbors = args.n_neighbors
+    leiden_resolution = args.leiden_resolution
     min_cell_num = args.min_cell_num
     f_gene_blacklist = args.gene_blacklist
     max_expr_ratio = args.max_expr_ratio
@@ -220,9 +251,21 @@ def build_embedding_info_main(args):
         with open(f_gene_blacklist, "r") as f:
             for line in f.readlines():
                 gene_blacklist.append(line.rstrip("\n"))
-    
-    logging.info(f"Loading single cell RNA-seq data from {f_in} ...")
-    sce = sc.read_h5ad(f_in)
+
+    if n_neighbors is None:
+        n_cell = sce.shape[0]
+        if n_cell > 100000:
+            n_neighbors = 40
+        elif n_cell > 75000:
+            n_neighbors = 35
+        elif n_cell > 50000:
+            n_neighbors = 30
+        elif n_cell > 25000:
+            n_neighbors = 25
+        elif n_cell > 15000:
+            n_neighbors = 20
+        else:
+            n_neighbors = 15
 
     if gene_id_label is None:
         gene_name_arr = sce.var_names
@@ -258,7 +301,7 @@ def build_embedding_info_main(args):
         gene_name_arr = list(sce.var[gene_id_label].to_numpy())
 
     logging.info(f"Computing embedding ...")
-    cell_info_df = proprocess_SCE_HVG_embedding(sce, cell_type_label, embedding_resolution, no_HVG, embedding, embedding_dim, n_neighbors)
+    cell_info_df = proprocess_SCE_HVG_embedding(sce, cell_type_label, embedding_resolution, no_HVG, embedding, embedding_dim, n_neighbors, leiden_resolution)
 
     embedding_info = cell_info_df.groupby(["Embedding1BinIndex", "Embedding2BinIndex", "Embedding3BinIndex"]).size().reset_index(name='CellNum')
     select_embedding_info = embedding_info[embedding_info["CellNum"]>=min_cell_num]
@@ -318,6 +361,27 @@ def build_embedding_info_main(args):
     f_index = os.path.join(f_out, "pretreat.pkl")
     with open(f_index, "wb") as f:
         pickle.dump(index_dict, f)
+
+
+def build_embedding_info_by_ST_main(args):
+    f_spot = args.spot
+    f_mask = args.mask
+    x_index_label = args.x_index_label
+    y_index_label = args.y_index_label
+    UMI_label = args.UMI_label
+    gene_id_label = args.gene_id_label
+
+    logging.info(f"Loading ST data from {f_spot} ...")
+    sce = spot2sce(f_spot, f_mask, x_index_label, y_index_label, UMI_label, gene_id_label)
+    build_embedding_info_worker(sce, args, "leiden")
+
+
+def build_embedding_info_main(args):
+    f_in = args.input
+    logging.info(f"Loading single cell RNA-seq data from {f_in} ...")
+    sce = sc.read_h5ad(f_in)
+    build_embedding_info_worker(sce, args, args.cell_type_label)
+
 
 def build_embedding_index_main(args):
     f_in = args.input

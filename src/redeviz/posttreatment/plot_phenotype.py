@@ -9,9 +9,13 @@ def plot_phenotype_main(args):
     f_spot = args.input
     f_out = args.output
     keep_other = args.keep_other
+    white_bg = args.white_bg
 
     spot_df = pd.read_csv(f_spot, sep="\t")
     spot_df = spot_df[spot_df["RefCellTypeScore"] > spot_df["BackgroundScore"]]
+    spot_df["x"] = spot_df["x"] - spot_df["x"].min()
+    spot_df["y"] = spot_df["y"] - spot_df["y"].min()
+
     x_range = spot_df["x"].max() + 1
     y_range = spot_df["y"].max() + 1
     nbg_spot_df = spot_df[spot_df["LabelTransfer"]!="Background"]
@@ -30,9 +34,12 @@ def plot_phenotype_main(args):
     R_arr = coo_matrix((sig_df["Embedding1"].to_numpy().astype(int)+20, (sig_df["x"].to_numpy(), sig_df["y"].to_numpy())), (x_range, y_range)).toarray()
     G_arr = coo_matrix((sig_df["Embedding2"].to_numpy().astype(int)+20, (sig_df["x"].to_numpy(), sig_df["y"].to_numpy())), (x_range, y_range)).toarray()
     B_arr = coo_matrix((sig_df["Embedding3"].to_numpy().astype(int)+20, (sig_df["x"].to_numpy(), sig_df["y"].to_numpy())), (x_range, y_range)).toarray()
-    R_arr[other_pos] = 50
-    G_arr[other_pos] = 50
-    B_arr[other_pos] = 50
+    R_arr[other_pos] = 150
+    G_arr[other_pos] = 150
+    B_arr[other_pos] = 150
     RGB_arr = np.stack([R_arr, G_arr, B_arr], -1)
     RGB_arr = RGB_arr.astype(np.uint8)
+    if white_bg:
+        bg_pos = RGB_arr.sum(-1) == 0
+        RGB_arr[bg_pos] = 255
     plt.imsave(f_out, cv.rotate(RGB_arr, cv.ROTATE_90_COUNTERCLOCKWISE))

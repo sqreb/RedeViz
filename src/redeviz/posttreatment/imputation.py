@@ -55,10 +55,14 @@ def imputation_build_index_main(args):
     embedding_weight_mat = norm.pdf(embedding_dist_mat/embedding_smooth_sigma)
     norm_embedding_weight_mat = embedding_weight_mat / embedding_weight_mat.sum(-1).reshape([-1, 1])
     smooth_embedding_cnt_mat = np.matmul(norm_embedding_weight_mat, norm_cnt_mat)
+    if gene_name_label is None:
+        gene_li = np.array(sce.var_names)
+    else:
+        gene_li = sce.var[gene_name_label].to_numpy()
     smooth_embedding_dict = {
         "embedding_mat": ref_embedding_mat,
         "smooth_embedding_cnt": smooth_embedding_cnt_mat,
-        "gene_li": sce.var[gene_name_label].to_numpy()
+        "gene_li": gene_li
     }
     with open(f_out, "wb") as f:
         pickle.dump(smooth_embedding_dict, f)
