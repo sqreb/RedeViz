@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
-from cellpose import models
+# from cellpose import models
 from scipy.sparse import coo_matrix, save_npz
 import cv2 as cv
 import os
@@ -9,23 +9,23 @@ import skimage
 import logging
 
 
-def mask_by_cellpose(sm_total_UMI_arr, cell_diameter=30, model_type="cyto"):
-    norm_cyto_arr = 255 * sm_total_UMI_arr / sm_total_UMI_arr.max()
-    norm_cyto_arr = norm_cyto_arr.astype(np.uint8)
-    imgs = [norm_cyto_arr]
-    model = models.Cellpose(gpu=True, model_type=model_type)
-    masks, flows, styles, diams = model.eval(imgs, channels=[0, 0], diameter=cell_diameter)
-    mask_arr = masks[0]
-    flow_arr = flows[0][0]
-    mask_num = np.bincount(mask_arr.reshape([-1]))
-    mask_index_arr = np.arange(len(mask_num))
-    rm_mask_index = np.where(mask_num < (cell_diameter * cell_diameter / 4))
-    mask_index_arr[rm_mask_index] = 0
-    new_mask_arr = mask_index_arr[mask_arr]
-    new_flow_arr = flow_arr.copy()
-    zero_pos_pos = np.where(new_mask_arr == 0)
-    new_flow_arr[zero_pos_pos[0], zero_pos_pos[1], :] = 0
-    return new_mask_arr, new_flow_arr
+# def mask_by_cellpose(sm_total_UMI_arr, cell_diameter=30, model_type="cyto"):
+#     norm_cyto_arr = 255 * sm_total_UMI_arr / sm_total_UMI_arr.max()
+#     norm_cyto_arr = norm_cyto_arr.astype(np.uint8)
+#     imgs = [norm_cyto_arr]
+#     model = models.Cellpose(gpu=True, model_type=model_type)
+#     masks, flows, styles, diams = model.eval(imgs, channels=[0, 0], diameter=cell_diameter)
+#     mask_arr = masks[0]
+#     flow_arr = flows[0][0]
+#     mask_num = np.bincount(mask_arr.reshape([-1]))
+#     mask_index_arr = np.arange(len(mask_num))
+#     rm_mask_index = np.where(mask_num < (cell_diameter * cell_diameter / 4))
+#     mask_index_arr[rm_mask_index] = 0
+#     new_mask_arr = mask_index_arr[mask_arr]
+#     new_flow_arr = flow_arr.copy()
+#     zero_pos_pos = np.where(new_mask_arr == 0)
+#     new_flow_arr[zero_pos_pos[0], zero_pos_pos[1], :] = 0
+#     return new_mask_arr, new_flow_arr
 
 def mask_by_bin_worker(norm_sm_total_UMI_arr, sm_total_UMI_arr, cell_diameter=30):
     cell_mask_region = cv.adaptiveThreshold(norm_sm_total_UMI_arr, 1, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 50*cell_diameter+1, 0)

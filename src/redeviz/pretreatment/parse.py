@@ -100,7 +100,7 @@ def parse_pretreatment_args(pretreatment_subparser):
                         help="UMI label (default: UMI)")
     parser_mask_ST_data.add_argument("--mask-model", type=str, dest="mask_model",
                         metavar="mask_model", required=False, default="bin", 
-                        help="Mask model [bin, cellpose] (default: bin)", choices=["bin", "cellpose"])
+                        help="Mask model [bin] (default: bin)", choices=["bin"])
     parser_mask_ST_data.add_argument("--smooth-sd", type=int, dest="smooth_sd",
                         metavar="smooth_sd", required=False, default=2)
     parser_mask_ST_data.add_argument("--cell-diameter", type=int, dest="cell_diameter",

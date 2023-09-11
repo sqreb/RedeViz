@@ -9,3 +9,4 @@ Shapely==1.8.2
 tifffile==2023.4.12
 pynvml==11.4.1
 kornia==0.7.0
+scikit-image==0.21.0
