@@ -148,16 +148,18 @@ def mask_ST_data_main(args):
     knrnel_size = 2 * smooth_sd + 1
     total_UMI_arr = total_UMI_arr.astype(np.float32)
     sm_total_UMI_arr = cv.GaussianBlur(total_UMI_arr, (knrnel_size, knrnel_size), smooth_sd)
-    Q90 = np.quantile(sm_total_UMI_arr, 0.9)
+    nzo_sm_total_UMI_arr = sm_total_UMI_arr[sm_total_UMI_arr>0]
+    Q90 = np.quantile(nzo_sm_total_UMI_arr, 0.9)
     sm_total_UMI_arr[sm_total_UMI_arr>Q90] = Q90
     plt.imsave(os.path.join(f_out, "smoothed_UMI.png"), cv.rotate(sm_total_UMI_arr, cv.ROTATE_90_COUNTERCLOCKWISE))
 
     if mask_model == "cellpose":
-        mask_arr, flow_arr = mask_by_cellpose(sm_total_UMI_arr, cell_diameter, "cyto")
+        # mask_arr, flow_arr = mask_by_cellpose(sm_total_UMI_arr, cell_diameter, "cyto")
+        raise ValueError('Mask model must be in ["bin"].')
     elif mask_model == "bin":
         mask_arr, flow_arr = mask_by_bin(sm_total_UMI_arr, cell_diameter)
     else:
-        raise ValueError('Mask model must be in ["cellpose", "bin"].')
+        raise ValueError('Mask model must be in ["bin"].')
     
     plt.imsave(os.path.join(f_out, "mask_pos.png"), cv.rotate(flow_arr, cv.ROTATE_90_COUNTERCLOCKWISE))
     save_npz(file=os.path.join(f_out, "mask"), matrix=coo_matrix(mask_arr))
