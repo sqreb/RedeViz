@@ -205,7 +205,7 @@ def spot2sce(f_spot, f_mask, x_index_label, y_index_label, UMI_label, gene_id_la
     gene_num = len(gene_li)
     max_cell_index = cell_info_df["CellIndex"].max()
     cell_gene_cnt_arr = coo_matrix((cell_info_df[UMI_label].to_numpy(), (cell_info_df["CellIndex"].to_numpy(), cell_info_df["GeneIndex"].to_numpy())), (max_cell_index+1, gene_num)).toarray()
-    nzo_index = cell_gene_cnt_arr.sum(-1) > 0
+    nzo_index = cell_gene_cnt_arr.sum(-1) > 10
     cell_gene_cnt_arr = cell_gene_cnt_arr[nzo_index, :]
     cell_center_info = pd.DataFrame({"CellIndex": np.where(nzo_index)[0]}).merge(cell_center_info)
     assert np.all(np.where(nzo_index)[0] == cell_center_info["CellIndex"].to_numpy())
