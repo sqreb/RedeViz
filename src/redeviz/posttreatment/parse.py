@@ -39,7 +39,7 @@ def parse_posttreatment_args(posttreatment_subparser):
     parser_build.add_argument("--index", type=str, dest="index", metavar="index.pkl", required=True, help="Embedding information with pkl format")
     parser_build.add_argument("--sce", type=str, dest="sce", metavar="sce.h5ad", required=True, help="scRNA-seq count matrix with H5AD format")
     parser_build.add_argument("--gene-name-label", type=str, dest="gene_name_label", metavar="gene_name_label", required=False, default=None, help="Gene name label in SCE file")
-    parser_build.add_argument("--embedding-smooth-sigma", type=float, dest="embedding_smooth_sigma", metavar="embedding_smooth_sigma", required=False, default=None, help="Embedding smooth sigma")
+    parser_build.add_argument("--embedding-smooth-sigma", type=float, dest="embedding_smooth_sigma", metavar="embedding_smooth_sigma", required=False, default=3.0, help="Embedding smooth sigma [default=3.0]")
     parser_build.add_argument("--output", type=str, dest="output", metavar="imputation.pkl", required=True, help="Imputation index")
 
     parser_impute = impute_subparsers.add_parser('run', help='Run imputation.')
