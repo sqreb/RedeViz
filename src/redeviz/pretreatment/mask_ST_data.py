@@ -27,8 +27,7 @@ import logging
 #     new_flow_arr[zero_pos_pos[0], zero_pos_pos[1], :] = 0
 #     return new_mask_arr, new_flow_arr
 
-def mask_by_bin_worker(norm_sm_total_UMI_arr, sm_total_UMI_arr, cell_diameter=30):
-    cell_mask_region = cv.adaptiveThreshold(norm_sm_total_UMI_arr, 1, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 50*cell_diameter+1, 0)
+def mask_by_bin_worker(sm_total_UMI_arr, cell_mask_region, cell_diameter=30):
     n_seg = int(cell_mask_region.sum() / (cell_diameter**2 / 4 * np.pi))
     slic_mask_res = skimage.segmentation.slic(sm_total_UMI_arr, mask=cell_mask_region, n_segments=n_seg, start_label=1, channel_axis=None)
 
@@ -89,6 +88,7 @@ def mask_by_bin(sm_total_UMI_arr, cell_diameter=30, window_size=1500):
     sm_total_UMI_arr = sm_total_UMI_arr.astype(np.float32)
     norm_sm_total_UMI_arr = 255 * sm_total_UMI_arr / sm_total_UMI_arr.max()
     norm_sm_total_UMI_arr = norm_sm_total_UMI_arr.astype(np.uint8)
+    cell_mask_region = cv.adaptiveThreshold(norm_sm_total_UMI_arr, 1, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 50*cell_diameter+1, 0)
 
     mask_arr = np.zeros_like(sm_total_UMI_arr, dtype=np.int64)
     flow_arr = np.zeros([sm_total_UMI_arr.shape[0], sm_total_UMI_arr.shape[1], 3], dtype=np.uint8)
@@ -105,10 +105,11 @@ def mask_by_bin(sm_total_UMI_arr, cell_diameter=30, window_size=1500):
             logging.info(f"X: {x_start}-{x_end}; Y: {y_start}-{y_end}")
             tmp_sm_total_UMI_arr = sm_total_UMI_arr[x_start:x_end, y_start:y_end]
             tmp_norm_sm_total_UMI_arr = norm_sm_total_UMI_arr[x_start:x_end, y_start:y_end]
+            tmp_cell_mask_region = cell_mask_region[x_start:x_end, y_start:y_end]
             expr_spot_num = np.sum(tmp_norm_sm_total_UMI_arr>0)
             if expr_spot_num < (4 * (cell_diameter**2)):
                 continue
-            tmp_mask_arr, tmp_flow_arr = mask_by_bin_worker(tmp_norm_sm_total_UMI_arr, tmp_sm_total_UMI_arr, cell_diameter)
+            tmp_mask_arr, tmp_flow_arr = mask_by_bin_worker(tmp_sm_total_UMI_arr, tmp_cell_mask_region, cell_diameter)
             flow_arr[x_start:x_end, y_start:y_end, :] = tmp_flow_arr
             tmp_mask_arr[tmp_mask_arr>0] = tmp_mask_arr[tmp_mask_arr>0] + mask_arr.max()
             mask_arr[x_start:x_end, y_start:y_end] = tmp_mask_arr
