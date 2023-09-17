@@ -8,7 +8,7 @@ def load_data(fname, sor_cutoff, sbr_cutoff, keep_other, denoise, min_spot_num):
     if not keep_other:
         spot_df = spot_df[spot_df["LabelTransfer"]!="Other"]
     if denoise:
-        nbg_spot_df = filter_pred_df(nbg_spot_df, min_spot_in_region=min_spot_num)
+        spot_df = filter_pred_df(spot_df, min_spot_in_region=min_spot_num)
 
     spot_df["sor"] = spot_df["RefCellTypeScore"] / spot_df["OtherCellTypeScore"]
     spot_df["sbr"] = spot_df["RefCellTypeScore"] / spot_df["BackgroundScore"]
