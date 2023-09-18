@@ -33,7 +33,7 @@ class SpatialSpace(object):
         self.keep_other = keep_other
         no_bg_spot = spot_df[spot_df["LabelTransfer"]!="Background"]
         if denoise:
-            no_bg_spot = filter_pred_df(no_bg_spot, min_spot_in_region=min_spot_num)
+            no_bg_spot = filter_pred_df(no_bg_spot, min_spot_in_region=100)
     
         self.shift_x = no_bg_spot["x"].min()
         self.shift_y = no_bg_spot["y"].min()
@@ -94,12 +94,45 @@ class SpatialSpace(object):
         res = tr.tensor(embedding_arr, dtype=tr.float32)
         return res
 
-    def smooth(self, coord_arr, smooth_radius=2):
+    def smooth(self, coord_arr, smooth_radius):
         logging.info("Smoothing the image ...")
-        knrnel_size = 2 * smooth_radius + 1
-        sm_coord_arr = cv.GaussianBlur(coord_arr, (knrnel_size, knrnel_size), 0)
-        sm_coord_arr[self.ori_bg_coords] = [0, 0, 0]
-        return sm_coord_arr
+        bg_pos_arr = self.bg_pos_arr.to_dense()[0, :, :, 0]
+        other_pos_arr = self.other_pos_arr.to_dense()[0, :, :, 0]
+        sum_rgb_arr = coord_arr[0, :, :, :].sum(-1)
+        sig_pos_arr = (sum_rgb_arr>0) & (sum_rgb_arr<(255*3))
+
+        ori_r_arr = coord_arr[0, :, :, 0]
+        ori_g_arr = coord_arr[0, :, :, 1]
+        ori_b_arr = coord_arr[0, :, :, 2]
+
+        r_arr = tr.where(sig_pos_arr, ori_r_arr, 0)
+        g_arr = tr.where(sig_pos_arr, ori_g_arr, 0)
+        b_arr = tr.where(sig_pos_arr, ori_b_arr, 0)
+
+        element = cv.getStructuringElement(cv.MORPH_ELLIPSE, (2 * smooth_radius + 1, 2 * smooth_radius + 1), (smooth_radius, smooth_radius))
+        dilation_sig_pos_arr = tr.tensor(cv.dilate(sig_pos_arr.numpy().astype(np.uint8), element), dtype=tr.bool)
+        new_bg_pos_arr = tr.tensor(bg_pos_arr & (~dilation_sig_pos_arr), dtype=tr.bool)
+
+        element_dist_arr = np.array([[np.sqrt(x**2+y**2) for x in range(-1*smooth_radius*2, smooth_radius*2+1)] for y in range(-1*smooth_radius*2, smooth_radius*2+1)])
+        element_gaussian_arr = np.exp(-1*(element_dist_arr**2)/(smooth_radius**2))
+        element_gaussian_arr[element_dist_arr>(2*smooth_radius)] = 0
+        total_r_arr = cv.filter2D(r_arr.numpy().astype(np.float32), -1, element_gaussian_arr)
+        total_g_arr = cv.filter2D(g_arr.numpy().astype(np.float32), -1, element_gaussian_arr)
+        total_b_arr = cv.filter2D(b_arr.numpy().astype(np.float32), -1, element_gaussian_arr)
+        total_pos_arr = cv.filter2D(sig_pos_arr.numpy().astype(np.float32), -1, element_gaussian_arr)
+        total_other_arr = cv.filter2D(other_pos_arr.numpy().astype(np.float32), -1, element_gaussian_arr)
+
+        sm_r_arr = ((total_r_arr) / (total_pos_arr+1e-3)).astype(int)
+        sm_g_arr = ((total_g_arr) / (total_pos_arr+1e-3)).astype(int)
+        sm_b_arr = ((total_b_arr) / (total_pos_arr+1e-3)).astype(int)
+        sm_other_pos_arr = tr.tensor(total_other_arr > total_pos_arr)
+
+        new_r_arr = tr.where(new_bg_pos_arr, 0, tr.where(sm_other_pos_arr, 255, tr.tensor(sm_r_arr)))
+        new_g_arr = tr.where(new_bg_pos_arr, 0, tr.where(sm_other_pos_arr, 255, tr.tensor(sm_g_arr)))
+        new_b_arr = tr.where(new_bg_pos_arr, 0, tr.where(sm_other_pos_arr, 255, tr.tensor(sm_b_arr)))
+        new_coord_arr = tr.stack([new_r_arr, new_g_arr, new_b_arr], -1).numpy().astype(np.uint8)
+        return new_coord_arr
+
 
     def adj_mean_shift_res(self, res):
         total_score = res[:, :, :3].sum(-1)
@@ -229,7 +262,6 @@ class SpatialSpace(object):
     def compute_all(self, smooth_radius=2, receptive_radius=10, embedding_radius=10, merge_embedding_dist=5, min_spot_num=100, thread=20):
         self.spot_df2pos()
         coord_arr = self.pos2meanShift_input()
-        coord_arr = np.uint8(coord_arr[0, :, :, :].numpy())
         coord_arr = self.smooth(coord_arr, smooth_radius)
         res = self.run_mean_shift(coord_arr, receptive_radius, embedding_radius, merge_embedding_dist, min_spot_num)
         self.domain_index_arr, self.domain_info_df = self.mean_shift2domain(res, min_spot_num*0.9, thread)
@@ -245,7 +277,8 @@ def segment_main(args):
     min_spot_num = args.min_spot_num
     keep_other = args.keep_other
     thread = 1
+    denoise = args.denoise
 
-    spatial_space = SpatialSpace(f_in, keep_other, args.denoise, args.min_spot_num)
+    spatial_space = SpatialSpace(f_in, keep_other, denoise, min_spot_num)
     spatial_space.compute_all(smooth_radius, receptive_radius, embedding_radius, merge_embedding_dist, min_spot_num, thread)
     spatial_space.write_res(f_dir)
