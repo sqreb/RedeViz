@@ -29,6 +29,12 @@ import logging
 
 def mask_by_bin_worker(sm_total_UMI_arr, cell_mask_region, cell_diameter=30):
     n_seg = int(cell_mask_region.sum() / (cell_diameter**2 / 4 * np.pi))
+    img_x_range, img_y_range = sm_total_UMI_arr.shape
+    if n_seg == 0:
+        new_mask_arr = np.zeros((img_x_range, img_y_range), dtype=np.int64)
+        new_flow_arr = np.zeros((img_x_range, img_y_range, 3), dtype=np.uint8)
+        return new_mask_arr, new_flow_arr
+
     slic_mask_res = skimage.segmentation.slic(sm_total_UMI_arr, mask=cell_mask_region, n_segments=n_seg, start_label=1, channel_axis=None)
 
     mask_pos = slic_mask_res > 0
@@ -49,6 +55,12 @@ def mask_by_bin_worker(sm_total_UMI_arr, cell_mask_region, cell_diameter=30):
     
     slic_mask_res = coo_matrix((mask_index, (mask_x, mask_y)), sm_total_UMI_arr.shape).toarray()
     mask_pos = slic_mask_res > 0
+
+    if np.sum(mask_pos) == 0:
+        new_mask_arr = np.zeros((img_x_range, img_y_range), dtype=np.int64)
+        new_flow_arr = np.zeros((img_x_range, img_y_range, 3), dtype=np.uint8)
+        return new_mask_arr, new_flow_arr
+
     mask_num = np.bincount(slic_mask_res.reshape([-1]))
     mask_x, mask_y = np.where(mask_pos)
     mask_index = slic_mask_res[mask_pos]

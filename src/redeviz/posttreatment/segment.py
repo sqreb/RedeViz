@@ -105,6 +105,10 @@ class SpatialSpace(object):
         ori_g_arr = coord_arr[0, :, :, 1]
         ori_b_arr = coord_arr[0, :, :, 2]
 
+        if smooth_radius == 0:
+            new_coord_arr = tr.stack([ori_r_arr, ori_g_arr, ori_b_arr], -1).numpy().astype(np.uint8)
+            return new_coord_arr
+
         r_arr = tr.where(sig_pos_arr, ori_r_arr, 0)
         g_arr = tr.where(sig_pos_arr, ori_g_arr, 0)
         b_arr = tr.where(sig_pos_arr, ori_b_arr, 0)
