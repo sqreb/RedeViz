@@ -267,8 +267,8 @@ class SpatialSpace(object):
         self.spot_df2pos()
         coord_arr = self.pos2meanShift_input()
         coord_arr = self.smooth(coord_arr, smooth_radius)
-        res = self.run_mean_shift(coord_arr, receptive_radius, embedding_radius, merge_embedding_dist, min_spot_num)
-        self.domain_index_arr, self.domain_info_df = self.mean_shift2domain(res, min_spot_num*0.9, thread)
+        res = self.run_mean_shift(coord_arr, receptive_radius, embedding_radius, merge_embedding_dist, int(min_spot_num*1.2))
+        self.domain_index_arr, self.domain_info_df = self.mean_shift2domain(res, min_spot_num*0.7, thread)
         
 
 def segment_main(args):
