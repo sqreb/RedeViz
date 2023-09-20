@@ -244,13 +244,13 @@ class SpatialSpace(object):
         np.savetxt(os.path.join(f_dir, "domain.label.tsv"), domain_index_arr, delimiter="\t", fmt="%d")
         np.save(os.path.join(f_dir, "domain.label.npy"), domain_index_arr)
 
-        flat_domain_id = np.reshape(domain_index_arr, [-1]) + 3
+        flat_domain_id = np.reshape(self.domain_index_arr, [-1]) + 3
         self.domain_info_df["One"] = 1
         embedding_color_arr = self.domain_info_df[["AveEmbedding1", "AveEmbedding2", "AveEmbedding3"]].to_numpy() + 20
         embedding_color_arr = embedding_color_arr.astype(np.uint8)
         embedding_color_arr = np.concatenate([np.array([[255, 255, 255], [0, 0, 0], [255, 255, 255]], dtype=np.uint8), embedding_color_arr], 0)
         flat_color_arr = embedding_color_arr[flat_domain_id]
-        color_arr = np.reshape(flat_color_arr, [domain_index_arr.shape[0], domain_index_arr.shape[1], 3])
+        color_arr = np.reshape(flat_color_arr, [self.domain_index_arr.shape[0], self.domain_index_arr.shape[1], 3])
         img_arr = color_arr
         plt.imsave(os.path.join(f_dir, "domain.Embedding.png"), cv.rotate(img_arr, cv.ROTATE_90_COUNTERCLOCKWISE))
         self.write_domain_cell_ratio(os.path.join(f_dir, "domain2cell_type.spot_num.tsv"))
