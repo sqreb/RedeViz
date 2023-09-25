@@ -165,11 +165,15 @@ def compute_simu_info_dense_arr(dense_gene_bin_cnt, dense_t_norm_gene_bin_cnt, n
             tmp_quantile_cos_simi, tmp_neightbor_max_cos_simi_ratio = compute_simu_info_worker(tmp_pct_arr, norm_method, UMI_per_bin, ave_pct, main_bin_type_ratio, dense_t_norm_gene_bin_cnt, quantile_arr, neighbor_bin_expand_arr, simulate_number_per_batch)
             quantile_cos_simi = quantile_cos_simi + tmp_quantile_cos_simi
             neightbor_max_cos_simi_ratio = neightbor_max_cos_simi_ratio + tmp_neightbor_max_cos_simi_ratio
+            del tmp_quantile_cos_simi, tmp_neightbor_max_cos_simi_ratio
         quantile_cos_simi = quantile_cos_simi / simulate_batch_num
         neightbor_max_cos_simi_ratio = neightbor_max_cos_simi_ratio / simulate_batch_num
         quantile_cos_simi_li.append(quantile_cos_simi)
         neightbor_max_cos_simi_ratio_li.append(neightbor_max_cos_simi_ratio)
-    
+        del tmp_cnt_arr, tmp_pct_arr, quantile_cos_simi, neightbor_max_cos_simi_ratio
+        if tr.cuda.is_available():
+            tr.cuda.empty_cache()
+
     rand_quantile_cos_simi = tr.zeros_like(quantile_arr, dtype=tr.float32)
     rand_neightbor_max_cos_simi_ratio = tr.zeros([neighbor_bin_expand_arr.shape[0], embedding_bin_num], dtype=tr.float64, device=device)
     for batch_index in range(simulate_batch_num):
