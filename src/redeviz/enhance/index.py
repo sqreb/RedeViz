@@ -154,6 +154,9 @@ def compute_simu_info_dense_arr(dense_gene_bin_cnt, dense_t_norm_gene_bin_cnt, n
     quantile_arr = tr.tensor([0, 0.05, 0.25, 0.5, 0.75, 0.95, 1], device=device)
     quantile_cos_simi_li = list()
     neightbor_max_cos_simi_ratio_li = list()
+    if embedding_bin_num > 5000:
+        simulate_number_per_batch = int(simulate_number_per_batch / 2)
+        simulate_batch_num = simulate_batch_num * 2
     for bin_index in range(embedding_bin_num):
         if bin_index % 10 == 0:
             logging.info(f"{bin_index} / {embedding_bin_num}")
@@ -168,6 +171,8 @@ def compute_simu_info_dense_arr(dense_gene_bin_cnt, dense_t_norm_gene_bin_cnt, n
             del tmp_quantile_cos_simi, tmp_neightbor_max_cos_simi_ratio
         quantile_cos_simi = quantile_cos_simi / simulate_batch_num
         neightbor_max_cos_simi_ratio = neightbor_max_cos_simi_ratio / simulate_batch_num
+        quantile_cos_simi = quantile_cos_simi.to("cpu")
+        neightbor_max_cos_simi_ratio = neightbor_max_cos_simi_ratio.to("cpu")
         quantile_cos_simi_li.append(quantile_cos_simi)
         neightbor_max_cos_simi_ratio_li.append(neightbor_max_cos_simi_ratio)
         del tmp_cnt_arr, tmp_pct_arr, quantile_cos_simi, neightbor_max_cos_simi_ratio
@@ -182,6 +187,8 @@ def compute_simu_info_dense_arr(dense_gene_bin_cnt, dense_t_norm_gene_bin_cnt, n
         rand_neightbor_max_cos_simi_ratio = rand_neightbor_max_cos_simi_ratio + tmp_rand_neightbor_max_cos_simi_ratio
     rand_quantile_cos_simi = rand_quantile_cos_simi / simulate_batch_num
     rand_neightbor_max_cos_simi_ratio = rand_neightbor_max_cos_simi_ratio / simulate_batch_num
+    rand_quantile_cos_simi = rand_quantile_cos_simi.to("cpu")
+    rand_neightbor_max_cos_simi_ratio = rand_neightbor_max_cos_simi_ratio.to("cpu")
     quantile_cos_simi_li.append(rand_quantile_cos_simi)
     neightbor_max_cos_simi_ratio_li.append(rand_neightbor_max_cos_simi_ratio)
     quantile_cos_simi_arr = tr.stack(quantile_cos_simi_li, 0)
@@ -427,6 +434,11 @@ def build_embedding_index_main(args):
         dense_norm_gene_bin_cnt = norm_gene_bin_cnt.to_dense()
         dense_t_norm_gene_bin_cnt = dense_norm_gene_bin_cnt.transpose(1, 0)
 
+        norm_gene_bin_cnt = norm_gene_bin_cnt.to("cpu")
+        del gene_bin_cnt
+        if tr.cuda.is_available():
+            tr.cuda.empty_cache()
+
 
         logging.info(f"Simulating spatial transcriptomics data and compute prior probability ...")
         neighbor_bin_expand_li = [compute_neighbor_bin_loc(select_embedding_info, expand_size, bin_index_name="RowIndex") for expand_size in neightbor_expand_size]
@@ -448,6 +460,7 @@ def build_embedding_index_main(args):
             main_type_ratio_neightbor_max_cos_simi_ratio_arr = tr.stack(main_type_ratio_neightbor_max_cos_simi_ratio_li, 0)
             bin_quantile_cos_simi_li.append(main_type_ratio_quantile_cos_simi_arr)
             bin_neightbor_max_cos_simi_ratio_li.append(main_type_ratio_neightbor_max_cos_simi_ratio_arr)
+            
         index_dict = {
             "index_type": "NGS",
             "norm_method": norm_method,
