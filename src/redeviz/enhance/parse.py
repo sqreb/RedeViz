@@ -186,6 +186,9 @@ def parse_enhance_args(enhance_subparser):
     parser_main.add_argument("--ave-bin-dist-cutoff", type=int, dest="ave_bin_dist_cutoff",
                         metavar="ave_bin_dist_cutoff", required=False, default=None, 
                         help="Average embedding bin distance for neighbor spots")
+    parser_main.add_argument("--batch-effect-fct", type=float, dest="batch_effect_fct",
+                        metavar="batch_effect_fct", required=False, default=0.8, 
+                        help="Batch effect factor (default: 0.8)")
     parser_main.add_argument("--slice-x", type=int, nargs=2, dest="slice_x",
                         metavar="slice_x", required=False, default=None, 
                         help="Slice x region")

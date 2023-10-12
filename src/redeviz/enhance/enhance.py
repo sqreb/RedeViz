@@ -100,7 +100,7 @@ def enhance_main(args):
                 y_end = min(y_start+args.window_size-1, y_range-1)
                 logging.info(f"Spot region: x: {x_start}-{x_end}, y: {y_start}-{y_end}")
                 model = RedeVizBinModel(dataset, tmp_spot_data, tmp_total_UMI_arr)
-                model.compute_all(args.mid_signal_cutoff, args.neighbor_close_label_fct, args.signal_cov_score_fct, args.is_in_ref_score_fct, args.argmax_prob_score_fct, args.ave_bin_dist_cutoff, args.update_num)
+                model.compute_all(args.mid_signal_cutoff, args.neighbor_close_label_fct, args.signal_cov_score_fct, args.is_in_ref_score_fct, args.argmax_prob_score_fct, args.ave_bin_dist_cutoff, args.batch_effect_fct, args.update_num)
                 for data in model.iter_result(skip_bg=True):
                     if min(data[0], data[1]) < dataset.cell_radius:
                         continue
