@@ -93,14 +93,17 @@ def mask_by_bin_worker(sm_total_UMI_arr, cell_mask_region, cell_diameter=30):
     new_flow_arr[zero_pos[0], zero_pos[1], :] = 0
     return new_mask_arr, new_flow_arr
 
-def mask_by_bin(sm_total_UMI_arr, cell_diameter=30, low_expr_Q50_cutoff=0.25, window_size=1500):
+def mask_by_bin(sm_total_UMI_arr, cell_diameter=30, shift_cutoff=0, window_size=1500):
     nzo_sm_UMI_arr = sm_total_UMI_arr[sm_total_UMI_arr>0]
     nzo_Q50 = np.quantile(nzo_sm_UMI_arr, 0.5)
-    sm_total_UMI_arr[sm_total_UMI_arr<(nzo_Q50*low_expr_Q50_cutoff)] = 0
+    sm_total_UMI_arr[sm_total_UMI_arr<(nzo_Q50/5)] = 0
     sm_total_UMI_arr = sm_total_UMI_arr.astype(np.float32)
     norm_sm_total_UMI_arr = 255 * sm_total_UMI_arr / sm_total_UMI_arr.max()
     norm_sm_total_UMI_arr = norm_sm_total_UMI_arr.astype(np.uint8)
-    cell_mask_region = cv.adaptiveThreshold(norm_sm_total_UMI_arr, 1, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 50*cell_diameter+1, 0)
+    cell_mask_region = cv.adaptiveThreshold(norm_sm_total_UMI_arr, 1, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 50*cell_diameter+1, shift_cutoff)
+
+    cell_mask_region = cv.adaptiveThreshold(norm_sm_total_UMI_arr, 1, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 50*cell_diameter+1, 20)
+    cell_mask_region[norm_sm_total_UMI_arr==0] = 0
 
     mask_arr = np.zeros_like(sm_total_UMI_arr, dtype=np.int64)
     flow_arr = np.zeros([sm_total_UMI_arr.shape[0], sm_total_UMI_arr.shape[1], 3], dtype=np.uint8)
@@ -151,11 +154,10 @@ def mask_ST_data_main(args):
     smooth_sd = args.smooth_sd
     cell_diameter = args.cell_diameter
     mask_model = args.mask_model
-    low_expr_Q50_cutoff = args.low_expr_Q50_cutoff
+    shift_cutoff = args.shift_cutoff
     f_out = args.output
 
 
-    assert low_expr_Q50_cutoff < 1
 
     if not os.path.exists(f_out):
         os.makedirs(f_out)
@@ -177,7 +179,7 @@ def mask_ST_data_main(args):
         # mask_arr, flow_arr = mask_by_cellpose(sm_total_UMI_arr, cell_diameter, "cyto")
         raise ValueError('Mask model must be in ["bin"].')
     elif mask_model == "bin":
-        mask_arr, flow_arr = mask_by_bin(sm_total_UMI_arr, cell_diameter, low_expr_Q50_cutoff)
+        mask_arr, flow_arr = mask_by_bin(sm_total_UMI_arr, cell_diameter, shift_cutoff)
     else:
         raise ValueError('Mask model must be in ["bin"].')
     

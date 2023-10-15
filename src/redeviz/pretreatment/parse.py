@@ -105,7 +105,7 @@ def parse_pretreatment_args(pretreatment_subparser):
                         metavar="smooth_sd", required=False, default=2)
     parser_mask_ST_data.add_argument("--cell-diameter", type=int, dest="cell_diameter",
                         metavar="cell_diameter", default=30, required=False)
-    parser_mask_ST_data.add_argument("--low-expr-Q50-cutoff", type=float, dest="low_expr_Q50_cutoff",
-                        metavar="low_expr_Q50_cutoff", default=0.25, required=False)
+    parser_mask_ST_data.add_argument("--shift-cutoff", type=int, dest="shift_cutoff",
+                        metavar="shift_cutoff", default=0, required=False)
     parser_mask_ST_data.add_argument("--output", type=str, dest="output",
                         metavar="output", required=True)
