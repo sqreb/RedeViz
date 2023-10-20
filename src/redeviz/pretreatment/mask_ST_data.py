@@ -101,8 +101,6 @@ def mask_by_bin(sm_total_UMI_arr, cell_diameter=30, shift_cutoff=0, window_size=
     norm_sm_total_UMI_arr = 255 * sm_total_UMI_arr / sm_total_UMI_arr.max()
     norm_sm_total_UMI_arr = norm_sm_total_UMI_arr.astype(np.uint8)
     cell_mask_region = cv.adaptiveThreshold(norm_sm_total_UMI_arr, 1, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 50*cell_diameter+1, shift_cutoff)
-
-    cell_mask_region = cv.adaptiveThreshold(norm_sm_total_UMI_arr, 1, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 50*cell_diameter+1, 20)
     cell_mask_region[norm_sm_total_UMI_arr==0] = 0
 
     mask_arr = np.zeros_like(sm_total_UMI_arr, dtype=np.int64)
