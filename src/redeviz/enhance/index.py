@@ -385,6 +385,7 @@ def build_embedding_info_by_ST_main(args):
 
     logging.info(f"Loading ST data from {f_spot} ...")
     sce = spot2sce(f_spot, f_mask, x_index_label, y_index_label, UMI_label, gene_id_label)
+    sce.write_h5ad(os.path.join(args.output, "SCE.h5ad"))
     build_embedding_info_worker(sce, args, "leiden")
 
 

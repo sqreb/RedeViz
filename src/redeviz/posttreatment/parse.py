@@ -13,11 +13,12 @@ def parse_posttreatment_args(posttreatment_subparser):
     parser_plot_phenotype.add_argument("--input", type=str, dest="input",
                         metavar="spot.pred.tsv", required=True, help="Enhanced file generate by RedeViz")
     parser_plot_phenotype.add_argument("--output", type=str, dest="output",
-                        metavar="output.png", required=True, help="Output image")
+                        metavar="output.png/gif", required=True, help="Output image")
     parser_plot_phenotype.add_argument("--keep-other", dest="keep_other", action="store_true", help="Force to impute other cell types")
     parser_plot_phenotype.add_argument("--min-denoise-spot-num", type=int, dest="min_spot_num", default=200)
     parser_plot_phenotype.add_argument("--denoise", dest="denoise", action="store_true", help="Remove scattered pixel")
     parser_plot_phenotype.add_argument("--white-bg", dest="white_bg", action="store_true")
+    parser_plot_phenotype.add_argument("--GIF", dest="GIF", action="store_true", help="GIF format image")
 
     parser_plot_cell_type = posttreatment_subparser.add_parser('plot_cell_type', help='Cell type visualization.')
     parser_plot_cell_type.set_defaults(func=plot_cell_type_main)
