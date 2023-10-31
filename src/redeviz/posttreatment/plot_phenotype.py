@@ -5,6 +5,10 @@ import pandas as pd
 from scipy.sparse import coo_matrix
 from redeviz.posttreatment.utils import filter_pred_df
 import imageio
+from PIL import ImageFile, Image
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+Image.MAX_IMAGE_PIXELS = 10000000000
+
 
 def change_hue(RGB_arr, delta_H):
     assert delta_H >=0
