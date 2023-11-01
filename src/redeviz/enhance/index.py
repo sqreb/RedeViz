@@ -220,6 +220,7 @@ def spot2sce(f_spot, f_mask, x_index_label, y_index_label, UMI_label, gene_id_la
     cell_gene_cnt_arr = cell_gene_cnt_arr[nzo_index, :]
     cell_center_info = pd.DataFrame({"CellIndex": np.where(nzo_index)[0]}).merge(cell_center_info)
     assert np.all(np.where(nzo_index)[0] == cell_center_info["CellIndex"].to_numpy())
+    cell_gene_cnt_arr = scipy.sparse.csr_matrix(cell_gene_cnt_arr)
     sce = sc.AnnData(X=cell_gene_cnt_arr, obs=cell_center_info, var=pd.DataFrame({gene_id_label: gene_li}))
     sce.var_names = gene_li
     return sce
