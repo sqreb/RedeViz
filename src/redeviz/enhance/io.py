@@ -31,11 +31,11 @@ class RedeVizBinIndex(object):
         self.neightbor_expand_size = dataset_dict["neightbor_expand_size"]
         self.main_bin_type_ratio = dataset_dict["main_bin_type_ratio"]
         self.embedding_resolution = dataset_dict["embedding_resolution"]
-        self.norm_embedding_bin_cnt = dataset_dict["norm_embedding_bin_cnt"].to(device)
-        self.quantile_cos_simi = tr.stack(dataset_dict["quantile_cos_simi"], 0).to(device)
+        self.norm_embedding_bin_cnt = dataset_dict["norm_embedding_bin_cnt"]
+        self.quantile_cos_simi = tr.stack(dataset_dict["quantile_cos_simi"], 0)
         self.quantile_cos_simi = tr.permute(self.quantile_cos_simi, [2, 0, 3, 1])  # EmbeddingBinIndex, BinSize, Pct, MixRatio
         self.quantile_cos_simi = tr.concat([self.quantile_cos_simi, tr.unsqueeze(self.quantile_cos_simi[-1, :, :, :], 0)], 0)
-        self.neightbor_max_cos_simi_ratio = tr.stack(dataset_dict["neightbor_max_cos_simi_ratio"], 0).to(device)
+        self.neightbor_max_cos_simi_ratio = tr.stack(dataset_dict["neightbor_max_cos_simi_ratio"], 0)
         self.neightbor_max_cos_simi_ratio = tr.concat([self.neightbor_max_cos_simi_ratio, tr.unsqueeze(self.neightbor_max_cos_simi_ratio[:, :, :, -1, :], -2)], -2)
         self.neightbor_max_cos_simi_ratio = tr.permute(self.neightbor_max_cos_simi_ratio, [0, 1, 3, 4, 2])  # BinSize, MixRatio, EmbeddingBinLabel, MaxCosSimiEmbeddingBin, ExpandSize
         neightbor_max_cos_simi_max_score = tr.unsqueeze(tr.max(self.neightbor_max_cos_simi_ratio, -2)[0], -2)
@@ -44,7 +44,11 @@ class RedeVizBinIndex(object):
         self.cell_type_num = len(self.cell_type)
         self.embedding_bin_num = self.embedding_info.shape[0]
         self.bin_cell_type_ratio = self.compute_bin_cell_type_ratio_arr(self.cell_type, self.cell_info, self.embedding_bin_num, self.cell_type_num).to(device)
-        self.bin_dist = self.compute_bin_dist(self.embedding_info).to(device)
+        self.bin_dist = self.compute_bin_dist(self.embedding_info)
+        self.quantile_cos_simi = self.quantile_cos_simi.to(device)
+        self.neightbor_max_cos_simi_ratio = self.neightbor_max_cos_simi_ratio.to(device)
+        self.norm_embedding_bin_cnt = self.norm_embedding_bin_cnt.to(device)
+        self.bin_dist = self.bin_dist.to(device)
 
     def compute_bin_cell_type_ratio_arr(self, cell_type: np.array, cell_info: pd.DataFrame, embedding_bin_num: int, cell_type_num: int):
         cell_type_index_dict = {ct: index for (index, ct) in enumerate(cell_type)}
