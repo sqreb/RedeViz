@@ -47,8 +47,10 @@ class RedeVizBinIndex(object):
         self.bin_dist = self.compute_bin_dist(self.embedding_info)
         self.quantile_cos_simi = self.quantile_cos_simi.to(device)
         self.neightbor_max_cos_simi_ratio = self.neightbor_max_cos_simi_ratio.to(device)
+        self.neightbor_max_cos_simi_score = self.neightbor_max_cos_simi_score.to(device)
         self.norm_embedding_bin_cnt = self.norm_embedding_bin_cnt.to(device)
         self.bin_dist = self.bin_dist.to(device)
+
 
     def compute_bin_cell_type_ratio_arr(self, cell_type: np.array, cell_info: pd.DataFrame, embedding_bin_num: int, cell_type_num: int):
         cell_type_index_dict = {ct: index for (index, ct) in enumerate(cell_type)}
