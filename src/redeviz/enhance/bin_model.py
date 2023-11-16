@@ -300,7 +300,7 @@ class RedeVizBinModel(object):
         self.generate_all_state_by_cos_simi(use_other=True)
         self.score_arr = self.evaluate_score_new(label_arr, neighbor_close_label_fct, signal_cov_score_fct, is_in_ref_score_fct, argmax_prob_score_fct, ave_bin_dist_cutoff, embedding_expand_size, batch_effect_fct)
 
-    def iter_result(self, skip_bg):
+    def iter_result(self, skip_bg, mid_signal_cutoff):
         if self.score_arr is not None:
             logging.debug("Interpret results")
             other_score_arr = self.score_arr[0, :, :, self.dataset.embedding_bin_num].to("cpu").numpy()
@@ -322,7 +322,7 @@ class RedeVizBinModel(object):
             emb3_arr = self.dataset.embedding_info["Embedding3BinIndex"].to_numpy()
             bin_index_li = self.dataset.embedding_info["BinIndex"].to_numpy()
             for embedding_state, (_, x_index, y_index, _), (embedding1_bin_index, embedding2_bin_index, embedding3_bin_index, LabelTransfer)  in zip(label_arr, list(pos_arr), list(label_embedding_info)):
-                if skip_bg and (LabelTransfer == "Background"):
+                if skip_bg and (LabelTransfer == "Background") and (self.ave_expr_arr[x_index, y_index]<(mid_signal_cutoff/10)):
                         continue
                 tmp_other_score = other_score_arr[x_index, y_index]
                 tmp_bg_score = bg_score_arr[x_index, y_index]
@@ -339,8 +339,6 @@ class RedeVizBinModel(object):
                     tmp_emb_cell_type = LabelTransfer
                 if tmp_emb_score_arr < tmp_bg_score:
                     LabelTransfer = "Background"
-                    if skip_bg:
-                        continue
                 elif tmp_emb_score_arr < tmp_other_score:
                     LabelTransfer = "Other"
                 res = [
@@ -409,7 +407,7 @@ class RedeVizImgBinModel(RedeVizBinModel):
             label_arr[label_arr==zero_bin_index] = self.dataset.embedding_bin_num
         return label_arr
     
-    def iter_result(self, skip_bg):
+    def iter_result(self, skip_bg, mid_signal_cutoff):
         if self.score_arr is not None:
             logging.debug("Interpret results")
             other_score_arr = self.score_arr[0, :, :, self.dataset.embedding_bin_num].to("cpu").numpy()
@@ -431,7 +429,7 @@ class RedeVizImgBinModel(RedeVizBinModel):
             emb3_arr = self.dataset.embedding_info["Embedding3BinIndex"].to_numpy()
             bin_index_li = self.dataset.embedding_info["BinIndex"].to_numpy()
             for embedding_state, (_, x_index, y_index, _), (embedding1_bin_index, embedding2_bin_index, embedding3_bin_index, LabelTransfer)  in zip(label_arr, list(pos_arr), list(label_embedding_info)):
-                if skip_bg and (LabelTransfer == "Background"):
+                if skip_bg and (LabelTransfer == "Background") and (self.ave_expr_arr[x_index, y_index]<(mid_signal_cutoff/10)):
                         continue
                 tmp_other_score = other_score_arr[x_index, y_index]
                 tmp_bg_score = bg_score_arr[x_index, y_index]
@@ -446,10 +444,9 @@ class RedeVizImgBinModel(RedeVizBinModel):
                 else:
                     tmp_emb_score_arr = self.score_arr[0, x_index, y_index, embedding_state].to("cpu").numpy()
                     tmp_emb_cell_type = LabelTransfer
+
                 if tmp_emb_score_arr < tmp_bg_score:
                     LabelTransfer = "Background"
-                    if skip_bg:
-                        continue
                 elif tmp_emb_score_arr < tmp_other_score:
                     LabelTransfer = "Other"
                 if tmp_bin_index in self.dataset.zero_bin_index:
