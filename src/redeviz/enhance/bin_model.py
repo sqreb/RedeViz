@@ -321,8 +321,9 @@ class RedeVizBinModel(object):
             emb2_arr = self.dataset.embedding_info["Embedding2BinIndex"].to_numpy()
             emb3_arr = self.dataset.embedding_info["Embedding3BinIndex"].to_numpy()
             bin_index_li = self.dataset.embedding_info["BinIndex"].to_numpy()
+            ave_expr_arr = self.ave_expr_arr.to("cpu")[0, :, :, 0]
             for embedding_state, (_, x_index, y_index, _), (embedding1_bin_index, embedding2_bin_index, embedding3_bin_index, LabelTransfer)  in zip(label_arr, list(pos_arr), list(label_embedding_info)):
-                if skip_bg and (LabelTransfer == "Background") and (self.ave_expr_arr[x_index, y_index]<(mid_signal_cutoff/10)):
+                if skip_bg and (LabelTransfer == "Background") and (ave_expr_arr[x_index, y_index]<(mid_signal_cutoff/10)):
                         continue
                 tmp_other_score = other_score_arr[x_index, y_index]
                 tmp_bg_score = bg_score_arr[x_index, y_index]
@@ -428,8 +429,9 @@ class RedeVizImgBinModel(RedeVizBinModel):
             emb2_arr = self.dataset.embedding_info["Embedding2BinIndex"].to_numpy()
             emb3_arr = self.dataset.embedding_info["Embedding3BinIndex"].to_numpy()
             bin_index_li = self.dataset.embedding_info["BinIndex"].to_numpy()
+            ave_expr_arr = self.ave_expr_arr.to("cpu")[0, :, :, 0]
             for embedding_state, (_, x_index, y_index, _), (embedding1_bin_index, embedding2_bin_index, embedding3_bin_index, LabelTransfer)  in zip(label_arr, list(pos_arr), list(label_embedding_info)):
-                if skip_bg and (LabelTransfer == "Background") and (self.ave_expr_arr[x_index, y_index]<(mid_signal_cutoff/10)):
+                if skip_bg and (LabelTransfer == "Background") and (ave_expr_arr[x_index, y_index]<(mid_signal_cutoff/10)):
                         continue
                 tmp_other_score = other_score_arr[x_index, y_index]
                 tmp_bg_score = bg_score_arr[x_index, y_index]
