@@ -53,6 +53,7 @@ def imputation_build_index_main(args):
     embedding3_diff_mat = embedding_cell_mat[:, 2].reshape([1, -1]) - ref_embedding_mat[:, 2].reshape([-1, 1])
     embedding_dist_mat = np.sqrt(embedding1_diff_mat**2+embedding2_diff_mat**2+embedding3_diff_mat**2)
     embedding_weight_mat = norm.pdf(embedding_dist_mat/embedding_smooth_sigma)
+    embedding_weight_mat[embedding_dist_mat > (2*embedding_smooth_sigma)] = 0
     norm_embedding_weight_mat = embedding_weight_mat / embedding_weight_mat.sum(-1).reshape([-1, 1])
     smooth_embedding_cnt_mat = np.matmul(norm_embedding_weight_mat, norm_cnt_mat)
     if gene_name_label is None:
