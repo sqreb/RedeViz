@@ -196,7 +196,7 @@ def compute_simu_info_dense_arr(dense_gene_bin_cnt, dense_t_norm_gene_bin_cnt, n
     return quantile_cos_simi_arr, neightbor_max_cos_simi_ratio_arr
 
 
-def spot2sce(f_spot, f_mask, x_index_label, y_index_label, UMI_label, gene_id_label):
+def spot2sce(f_spot, f_mask, x_index_label, y_index_label, UMI_label, gene_id_label, min_UMI_per_cell=100):
     spot_df = pd.read_csv(f_spot, sep="\t")
     mask_arr = load_npz(f_mask)
     cell_info_df = pd.DataFrame({
@@ -216,7 +216,7 @@ def spot2sce(f_spot, f_mask, x_index_label, y_index_label, UMI_label, gene_id_la
     gene_num = len(gene_li)
     max_cell_index = cell_info_df["CellIndex"].max()
     cell_gene_cnt_arr = coo_matrix((cell_info_df[UMI_label].to_numpy(), (cell_info_df["CellIndex"].to_numpy(), cell_info_df["GeneIndex"].to_numpy())), (max_cell_index+1, gene_num)).toarray()
-    nzo_index = cell_gene_cnt_arr.sum(-1) > 10
+    nzo_index = cell_gene_cnt_arr.sum(-1) > min_UMI_per_cell
     cell_gene_cnt_arr = cell_gene_cnt_arr[nzo_index, :]
     cell_center_info = pd.DataFrame({"CellIndex": np.where(nzo_index)[0]}).merge(cell_center_info)
     assert np.all(np.where(nzo_index)[0] == cell_center_info["CellIndex"].to_numpy())
@@ -383,9 +383,10 @@ def build_embedding_info_by_ST_main(args):
     y_index_label = args.y_index_label
     UMI_label = args.UMI_label
     gene_id_label = args.gene_id_label
+    min_UMI_per_cell = args.min_UMI_per_cell
 
     logging.info(f"Loading ST data from {f_spot} ...")
-    sce = spot2sce(f_spot, f_mask, x_index_label, y_index_label, UMI_label, gene_id_label)
+    sce = spot2sce(f_spot, f_mask, x_index_label, y_index_label, UMI_label, gene_id_label, min_UMI_per_cell)
     sce.write_h5ad(os.path.join(args.output, "SCE.h5ad"))
     build_embedding_info_worker(sce, args, "leiden")
 

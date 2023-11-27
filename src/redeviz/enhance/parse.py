@@ -83,6 +83,9 @@ def parse_enhance_args(enhance_subparser):
                         metavar="n_neighbors", required=False, default=None, help="n_neighbors params in UMAP method")
     parser_pretreat_by_ST.add_argument("--leiden-resolution", type=float, dest="leiden_resolution",
                         metavar="leiden_resolution", required=False, default=1.0, help="leiden clustering resolution (default=1.0)")
+    parser_pretreat_by_ST.add_argument("--min-UMI-per-_cell", type=int, dest="min_UMI_per_cell",
+                        metavar="min_UMI_per_cell", required=False, default=100, 
+                        help="min UMI per cell (default: 100)")
     parser_pretreat_by_ST.add_argument("--min-cell-num", type=int, dest="min_cell_num",
                         metavar="min_cell_num", required=False, default=2, help="Minimum reference cell number in one embedding bin (default=2)")
     parser_pretreat_by_ST.add_argument("--gene-blacklist", type=str, dest="gene_blacklist",
