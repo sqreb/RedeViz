@@ -409,6 +409,8 @@ def build_embedding_index_main(args):
     with tr.no_grad():
         if device is None:
             device = select_device()
+        if not tr.cuda.is_available():
+            device = "cpu"
         main_bin_type_ratio_li = tr.tensor([0.75])
 
         with open(f_in, "rb") as f:
