@@ -43,7 +43,9 @@ def imputation_build_index_main(args):
     cnt_mat = sce.X
     if not isinstance(cnt_mat, np.ndarray):
         cnt_mat = cnt_mat.toarray()
-    norm_cnt_mat = 1e3 * cnt_mat / cnt_mat.sum(-1).reshape([-1, 1])
+    total_cnt_arr = cnt_mat.sum(-1).reshape([-1, 1])
+    total_cnt_arr = np.where(total_cnt_arr==0, 1, total_cnt_arr)
+    norm_cnt_mat = 1e3 * cnt_mat / total_cnt_arr
     embedding_cell_mat = embedding_cell_info[["Embedding1", "Embedding2", "Embedding3"]].to_numpy()
 
     embedding_info = embedding_info_dict["embedding_info"]
@@ -54,7 +56,9 @@ def imputation_build_index_main(args):
     embedding_dist_mat = np.sqrt(embedding1_diff_mat**2+embedding2_diff_mat**2+embedding3_diff_mat**2)
     embedding_weight_mat = norm.pdf(embedding_dist_mat/embedding_smooth_sigma)
     embedding_weight_mat[embedding_dist_mat > (2*embedding_smooth_sigma)] = 0
-    norm_embedding_weight_mat = embedding_weight_mat / embedding_weight_mat.sum(-1).reshape([-1, 1])
+    total_weight_arr = embedding_weight_mat.sum(-1).reshape([-1, 1])
+    total_weight_arr = np.where(total_weight_arr==0, 1, total_weight_arr)
+    norm_embedding_weight_mat = embedding_weight_mat / total_weight_arr
     smooth_embedding_cnt_mat = np.matmul(norm_embedding_weight_mat, norm_cnt_mat)
     if gene_name_label is None:
         gene_li = np.array(sce.var_names)
