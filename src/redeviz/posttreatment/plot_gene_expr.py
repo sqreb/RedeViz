@@ -11,7 +11,7 @@ def load_expr_arr(fname):
     nzo_arr = expr_mat[expr_mat>0]
     cutoff = np.percentile(nzo_arr, 95)
     expr_mat[expr_mat>cutoff] = cutoff
-    norm_mat = expr_mat / cutoff * 215
+    norm_mat = expr_mat / cutoff * 255
     return norm_mat
 
 def single_panel2multi_panel(x_range, y_range, r_arr=None, g_arr=None, b_arr=None):
@@ -21,9 +21,6 @@ def single_panel2multi_panel(x_range, y_range, r_arr=None, g_arr=None, b_arr=Non
         g_arr = np.zeros((x_range, y_range), dtype=np.float64)
     if b_arr is None:
         b_arr = np.zeros((x_range, y_range), dtype=np.float64)
-    r_arr = r_arr + 40
-    g_arr = g_arr + 40
-    b_arr = b_arr + 40
     rgb_arr = np.stack([r_arr, g_arr, b_arr], -1)
     rgb_arr = rgb_arr.astype(np.uint8)
     return rgb_arr
