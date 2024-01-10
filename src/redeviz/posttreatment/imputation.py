@@ -137,7 +137,7 @@ def imputation_main(args):
     embedding_knrnel_size = 2 * max(1, int(2 * embedding_smooth_sigma)) + 1
     for index, imputate_gene in enumerate(imputate_gene_list):
         logging.info(f"{imputate_gene} ({index} / {len(imputate_gene_list)})")
-        if os.path.exists(os.path.join(f_out, f"{imputate_gene}.imputate.npz")):
+        if os.path.exists(os.path.join(f_out, f"{imputate_gene}.impute.npz")):
             continue
         assert imputate_gene in embedding_index_gene_li, imputate_gene
         tmp_imputate_cnt = embedding_index_cnt_mat[:, embedding_index_gene_li==imputate_gene].reshape(-1)
@@ -150,5 +150,5 @@ def imputation_main(args):
         weight_sm_tmp_spot_imputate_mat = sm_tmp_spot_imputate_mat * norm_sm_UMI_mat
         if np.sum(weight_sm_tmp_spot_imputate_mat) == 0:
             continue
-        save_npz(file=os.path.join(f_out, f"{imputate_gene}.imputate"), matrix=coo_matrix(weight_sm_tmp_spot_imputate_mat))
+        save_npz(file=os.path.join(f_out, f"{imputate_gene}.impute"), matrix=coo_matrix(weight_sm_tmp_spot_imputate_mat))
 
