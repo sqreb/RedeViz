@@ -66,9 +66,11 @@ def parse_pretreatment_args(pretreatment_subparser):
     parser_filter_scRNA.add_argument("--input", type=str, dest="input",
                         metavar="input.h5ad", required=True, help="scRNA-seq data with H5AD format")
     parser_filter_scRNA.add_argument("--min-expr-gene-per-cell", type=int, dest="min_expr_gene_per_cell",
-                        metavar="min_expr_gene_per_cell", required=True)
+                        metavar="min_expr_gene_per_cell", default=5, required=False, help="Min expressed gene per cell (default=5)")
     parser_filter_scRNA.add_argument("--min-UMI-per-cell", type=int, dest="min_UMI_per_cell",
-                        metavar="min_UMI_per_cell", required=True)
+                        metavar="min_UMI_per_cell", default=10, required=False, help="Min UMI per cell (default=10)")
+    parser_filter_scRNA.add_argument("--downsampling-cell-number", type=int, dest="downsampling_cell_number",
+                        metavar="downsampling_cell_number", default=None, required=False, help="Downsampling cell number (default=None)")
     parser_filter_scRNA.add_argument("--output", type=str, dest="output",
                         metavar="output.h5ad", required=True, help="scRNA-seq data with H5AD format")
 

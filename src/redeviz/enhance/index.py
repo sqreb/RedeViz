@@ -10,6 +10,8 @@ import logging
 from scipy.sparse import load_npz, coo_matrix
 
 def proprocess_SCE_HVG_embedding(sce: sc.AnnData, cell_type_label: str, embedding_resolution: float, no_HVG: bool, embedding="tSNE", embedding_dim=2, n_neighbors=15, leiden_resolution=1):
+    if sce.shape[0] > 200000:
+        logging.warning(f"The number of cells ({sce.shape[0]}) is quite large. You might be able to speed up the calculation by reducing the number of cells through downsampling (See also: RedeViz pretreatment filter_scRNA).")
     sc.pp.normalize_total(sce, target_sum=1e4)
     sc.pp.log1p(sce)
     if no_HVG:
