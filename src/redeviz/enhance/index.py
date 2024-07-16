@@ -133,7 +133,7 @@ def compute_neighbor_bin_loc(bin_info: pd.DataFrame, expand_size: float, bin_ind
 def compute_simu_info_worker(pct_arr, norm_method, UMI_per_bin, rand_pct_arr, main_bin_type_ratio, t_norm_gene_bin_cnt, quantile_arr, neighbor_bin_expand_arr, N):
     assert norm_method in ["None", "log"]
     mu_simi = (pct_arr*main_bin_type_ratio + (1-main_bin_type_ratio) * rand_pct_arr) * UMI_per_bin
-    simu_cnt_arr = simu_cnt_arr = tr.distributions.poisson.Poisson(mu_simi.reshape([-1])).sample([N])
+    simu_cnt_arr = tr.distributions.poisson.Poisson(mu_simi.reshape([-1])).sample([N])
     if norm_method == "log":
         simu_cnt_arr = tr.log(1 + 1e3 * simu_cnt_arr / (tr.sum(simu_cnt_arr, -1, keepdim=True) + 1e-9))
     norm_simu_cnt_arr = simu_cnt_arr / tr.sqrt(tr.sum(simu_cnt_arr**2, -1, keepdim=True))
@@ -304,6 +304,7 @@ def build_embedding_info_worker(sce, args, cell_type_label):
     high_expr_gene = (gene_UMI_ratio > max_expr_ratio).numpy()
     
     sce = sce[:, ~high_expr_gene]
+    sce = sce[np.sum(sce.X>0, -1)>2]
     gene_cnt = sce.X
     if not isinstance(gene_cnt, scipy.sparse._csr.csr_matrix):
         gene_cnt = scipy.sparse.csr_matrix(gene_cnt)
