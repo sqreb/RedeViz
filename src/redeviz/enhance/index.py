@@ -297,7 +297,7 @@ def build_embedding_info_worker(sce, args, cell_type_label):
         gene_cnt = scipy.sparse.csr_matrix(gene_cnt)
 
     gene_cnt = csr_mat2sparse_tensor(gene_cnt)
-    gene_cnt = gene_cnt.type(tr.int64)
+    gene_cnt = gene_cnt.type(tr.float32)
     total_UMI_per_gene = tr.sparse.sum(gene_cnt, 0)
     total_UMI_per_gene = total_UMI_per_gene.to_dense()
     gene_UMI_ratio = total_UMI_per_gene / tr.sum(total_UMI_per_gene)
@@ -309,7 +309,7 @@ def build_embedding_info_worker(sce, args, cell_type_label):
     if not isinstance(gene_cnt, scipy.sparse._csr.csr_matrix):
         gene_cnt = scipy.sparse.csr_matrix(gene_cnt)
     gene_cnt = csr_mat2sparse_tensor(gene_cnt)
-    gene_cnt = gene_cnt.type(tr.int64)
+    gene_cnt = gene_cnt.type(tr.float32)
 
     if gene_id_label is None:
         gene_name_arr = list(sce.var_names)
