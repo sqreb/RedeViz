@@ -1,5 +1,5 @@
 from redeviz.enhance.index import build_embedding_info_main, build_embedding_index_main, build_embedding_info_by_ST_main
-from redeviz.enhance.enhance import enhance_main
+from redeviz.enhance.enhance import enhance_main, enhance_CODEX_main
 from redeviz.enhance.image_index import build_embedding_image_index_main
 from redeviz.enhance.img_enhance import img_enhance_main
 import pickle
@@ -83,7 +83,7 @@ def parse_enhance_args(enhance_subparser):
                         metavar="n_neighbors", required=False, default=None, help="n_neighbors params in UMAP method")
     parser_pretreat_by_ST.add_argument("--leiden-resolution", type=float, dest="leiden_resolution",
                         metavar="leiden_resolution", required=False, default=1.0, help="leiden clustering resolution (default=1.0)")
-    parser_pretreat_by_ST.add_argument("--min-UMI-per-_cell", type=int, dest="min_UMI_per_cell",
+    parser_pretreat_by_ST.add_argument("--min-UMI-per-cell", type=int, dest="min_UMI_per_cell",
                         metavar="min_UMI_per_cell", required=False, default=100, 
                         help="min UMI per cell (default: 100)")
     parser_pretreat_by_ST.add_argument("--min-cell-num", type=int, dest="min_cell_num",
@@ -140,12 +140,12 @@ def parse_enhance_args(enhance_subparser):
                         metavar="device_name", required=False, default=None, 
                         help="Device name (default=auto)")
     
-    parser_main = enhance_subparser.add_parser('run', help='Run SpatialSegment')
+    parser_main = enhance_subparser.add_parser('run', help='Run RedeViz')
     parser_main.set_defaults(func=run_enhance_main)
     parser_main.add_argument("-s", "--spot", type=str, dest="spot",
                         metavar="spot.tsv", required=True, help="Spot information")
     parser_main.add_argument("-i", "--index", type=str, dest="index",
-                        metavar="index.pkl", required=True, help="SpatialSegment index")
+                        metavar="index.pkl", required=True, help="RedeViz index")
     parser_main.add_argument("--x-index-label", type=str, dest="x_index_label",
                         metavar="x_index_label", required=False, default="spot_x_index", 
                         help="X index label: (default: x_index_label)")
@@ -156,7 +156,7 @@ def parse_enhance_args(enhance_subparser):
                         metavar="gene_name_label", required=False, default="Gid", 
                         help="Gene label (default: Gid)")
     parser_main.add_argument("--cell-radius", type=int, dest="cell_radius",
-                        metavar="cell_radius", required=False, default=4, 
+                        metavar="cell_radius", required=False, default=11, 
                         help="Cell radius (default: 11)")
     parser_main.add_argument("--UMI-label", type=str, dest="UMI_label",
                         metavar="UMI_label", required=False, default="UMI", 
@@ -174,6 +174,51 @@ def parse_enhance_args(enhance_subparser):
     parser_main.add_argument("--mid-signal-cutoff", type=float, dest="mid_signal_cutoff",
                         metavar="mid_signal_cutoff", required=False, default=None, 
                         help="Middle signal cutoff (default: Auto)")
+    parser_main.add_argument("--neighbor-close-label-fct", type=float, dest="neighbor_close_label_fct",
+                        metavar="neighbor_close_label_fct", required=False, default=0.2, 
+                        help="Neighbor close label factor (default: 0.2)")
+    parser_main.add_argument("--signal-cov-score-fct", type=float, dest="signal_cov_score_fct",
+                        metavar="signal_cov_score_fct", required=False, default=1.0, 
+                        help="Signal coverage score factor (default: 1.0)")
+    parser_main.add_argument("--is-in-ref-score-fct", type=float, dest="is_in_ref_score_fct",
+                        metavar="is_in_ref_score_fct", required=False, default=1.0, 
+                        help="Is in reference embedding bin score factor (default: 1.0)")
+    parser_main.add_argument("--argmax-prob-score-fct", type=float, dest="argmax_prob_score_fct",
+                        metavar="argmax_prob_score_fct", required=False, default=1.0, 
+                        help="Argmax probability score factor (default: 1.0)")
+    parser_main.add_argument("--ave-bin-dist-cutoff", type=int, dest="ave_bin_dist_cutoff",
+                        metavar="ave_bin_dist_cutoff", required=False, default=None, 
+                        help="Average embedding bin distance for neighbor spots")
+    parser_main.add_argument("--batch-effect-fct", type=float, dest="batch_effect_fct",
+                        metavar="batch_effect_fct", required=False, default=0.8, 
+                        help="Batch effect factor (default: 0.8)")
+    parser_main.add_argument("--slice-x", type=int, nargs=2, dest="slice_x",
+                        metavar="slice_x", required=False, default=None, 
+                        help="Slice x region")
+    parser_main.add_argument("--slice-y", type=int, nargs=2, dest="slice_y",
+                        metavar="slice_y", required=False, default=None, 
+                        help="Slice y region")
+    parser_main.add_argument("--device-name", type=str, dest="device_name",
+                        metavar="device_name", required=False, default=None, 
+                        help="Device name (default=auto)")
+
+    parser_main = enhance_subparser.add_parser('run_CODEX', help='Run RedeViz using CODEX data')
+    parser_main.set_defaults(func=enhance_CODEX_main)
+    parser_main.add_argument("--image", type=str, dest="image",
+                        metavar="image.qptiff", required=True, help="Spot information")
+    parser_main.add_argument("-i", "--index", type=str, dest="index",
+                        metavar="index.pkl", required=True, help="RedeViz index")
+    parser_main.add_argument("-o", "--output", type=str, dest="output",
+                        metavar="output.tsv", required=True, help="Output file")
+    parser_main.add_argument("--window-size", type=int, dest="window_size",
+                        metavar="window_size", required=False, default=256, 
+                        help="Window size (default: 256)")
+    parser_main.add_argument("--update-num", type=int, dest="update_num",
+                        metavar="update_num", required=False, default=2, 
+                        help="Update epoch number (default: 2)")
+    parser_main.add_argument("--mid-signal-cutoff", type=float, dest="mid_signal_cutoff",
+                        metavar="mid_signal_cutoff", required=False, default=4.0, 
+                        help="Middle signal cutoff (default: 4.0)")
     parser_main.add_argument("--neighbor-close-label-fct", type=float, dest="neighbor_close_label_fct",
                         metavar="neighbor_close_label_fct", required=False, default=0.2, 
                         help="Neighbor close label factor (default: 0.2)")

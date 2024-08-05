@@ -4,6 +4,7 @@ from redeviz.pretreatment.infer_spot_expr import infer_spot_expr_main
 from redeviz.pretreatment.filter_scRNA import filter_scRNA_main
 from redeviz.pretreatment.emb_info_select_gene import emb_info_select_gene_main
 from redeviz.pretreatment.mask_ST_data import mask_ST_data_main
+from redeviz.pretreatment.IF_denoise import IF_denoise_main
 
 def parse_pretreatment_args(pretreatment_subparser):
     parser_spot2bin = pretreatment_subparser.add_parser('spot2bin', help='Spot binning')
@@ -111,3 +112,13 @@ def parse_pretreatment_args(pretreatment_subparser):
                         metavar="shift_cutoff", default=0, required=False)
     parser_mask_ST_data.add_argument("--output", type=str, dest="output",
                         metavar="output", required=True)
+
+    parser_IF_denoise = pretreatment_subparser.add_parser('IF_denoise', help='Denoising Immunofluorescence Images')
+    parser_IF_denoise.set_defaults(func=IF_denoise_main)
+    parser_IF_denoise.add_argument("--image", type=str, dest="image",
+                        metavar="image.qptiff", required=True, help="CODEX image file with qptiff format")
+    parser_IF_denoise.add_argument("--method", type=str, dest="method",
+                        metavar="method", required=True, choices=["Noise2Fast", "rescale"])
+    parser_IF_denoise.add_argument("--output", type=str, dest="output",
+                        metavar="output.qptiff", required=True)
+    

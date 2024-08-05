@@ -4,6 +4,10 @@ from redeviz.enhance.bin_model import RedeVizBinModel
 from redeviz.enhance.utils import SparseZeroPadding2D, SparseTenserSlice2D, select_device
 import logging
 import numpy as np
+import tifffile
+import re
+import cv2 as cv
+
 
 def div_spot(spot_data, total_UMI_arr, expand_size, step=256):
     _, x_range, y_range, gene_num = spot_data.shape
@@ -39,6 +43,100 @@ def get_ave_smooth_cov(total_UMI_arr: tr.Tensor, expand_size=10, denoise_cutoff=
     res = float(tr.mean(denoise_nzo_total_umi))
     return res
 
+def load_image(f_img):
+    img_dict = dict()
+    shape = None
+    with tifffile.TiffFile(f_img) as tif:
+        for page in tif.pages:
+            page_desc = page.description
+            if page_desc.find("FullResolution") == -1:
+                continue
+            name_li = list(set(re.findall("<Biomarker>([ \S]+)</Biomarker>", page.description)))
+            if len(name_li)==0:
+                continue
+            name = name_li[0]
+            img_dict[name] = page.asarray()
+            shape = img_dict[name].shape
+    return img_dict, shape
+
+def load_CODEX_data(f_image, dataset):
+    img_dict, shape = load_image(f_image)
+    expr_img_li = list()
+    for gid in dataset.gene_name:
+        if gid in img_dict.keys():
+            img = img_dict[gid]
+        else:
+            img = np.zeros(shape)
+        expr_img_li.append(img)
+    expr_img_arr = np.stack(expr_img_li, -1)
+    x_range, y_range, gene_num = expr_img_arr.shape
+    expr_img_arr = tr.tensor(expr_img_arr).reshape((1, x_range, y_range, gene_num))
+    expr_img_arr = expr_img_arr.type(tr.float32) / 100
+    spot_data = expr_img_arr.to_sparse_coo()
+    total_UMI_arr = tr.reshape(expr_img_arr.sum(-1), (1, x_range, y_range, 1))
+    return spot_data, total_UMI_arr, x_range, y_range
+
+def enhance_worker(args, dataset, spot_data, total_UMI_arr, x_range, y_range, device):
+    is_empty = False
+    if args.slice_x is not None:
+        assert args.slice_y
+        _, x_min, y_min, _ = tr.min(spot_data.indices(), 1)[0].numpy()
+        if (x_range <= args.slice_x[0]) | (y_range <= args.slice_y[0]) | (x_min >= args.slice_x[1]) | (y_min >= args.slice_y[1]):
+            is_empty = True
+        else:
+            args.slice_x[1] = min(args.slice_x[1], x_range)
+            args.slice_y[1] = min(args.slice_y[1], y_range)
+            if min((args.slice_x[1] - args.slice_x[0]), (args.slice_y[1] - args.slice_y[0])) < (4 * dataset.max_bin_size):
+                raise ValueError("Slice region is too small")
+            spot_data = SparseTenserSlice2D(spot_data, args.slice_x[0], args.slice_x[1], args.slice_y[0], args.slice_y[1])
+            total_UMI_arr =  total_UMI_arr[:, args.slice_x[0]: args.slice_x[1], args.slice_y[0]: args.slice_y[1], :]
+            x0 = args.slice_x[0]
+            y0 = args.slice_y[0]
+    else:
+        x0 = 0
+        y0 = 0
+
+    if tr.sparse.sum(spot_data) == 0:
+        is_empty = True
+    
+    if is_empty:
+        with open(args.output, "w") as f:
+            header = ["x", "y", "EmbeddingState", "Embedding1", "Embedding2", "Embedding3", "LabelTransfer", "ArgMaxCellType", "RefCellTypeScore", "OtherCellTypeScore", "BackgroundScore"]
+            f.write("\t".join(header)+"\n")
+        return None
+
+    if args.ave_bin_dist_cutoff is None:
+        args.ave_bin_dist_cutoff = max(2, int(10 / dataset.embedding_resolution))
+
+    expand_size = int((dataset.max_bin_size - 1) / 2) + dataset.cell_radius
+    with open(args.output, "w") as f:
+        header = ["x", "y", "EmbeddingState", "Embedding1", "Embedding2", "Embedding3", "LabelTransfer", "ArgMaxCellType", "RefCellTypeScore", "OtherCellTypeScore", "BackgroundScore"]
+        f.write("\t".join(header)+"\n")
+        for tmp_spot_data, tmp_total_UMI_arr, x_start, y_start in div_spot(spot_data, total_UMI_arr, expand_size, step=args.window_size):
+            tmp_spot_data = tmp_spot_data.to(device)
+            tmp_total_UMI_arr = tmp_total_UMI_arr.to(device)
+            x_start = x_start + x0
+            y_start = y_start + y0
+            x_end = min(x_start+args.window_size-1, x_range-1)
+            y_end = min(y_start+args.window_size-1, y_range-1)
+            logging.info(f"Spot region: x: {x_start}-{x_end}, y: {y_start}-{y_end}")
+            model = RedeVizBinModel(dataset, tmp_spot_data, tmp_total_UMI_arr)
+            model.compute_all(mid_signal_cutoff=args.mid_signal_cutoff, neighbor_close_label_fct=args.neighbor_close_label_fct, signal_cov_score_fct=args.signal_cov_score_fct, is_in_ref_score_fct=args.is_in_ref_score_fct, argmax_prob_score_fct=args.argmax_prob_score_fct, ave_bin_dist_cutoff=args.ave_bin_dist_cutoff, embedding_expand_size=3, batch_effect_fct=args.batch_effect_fct, update_num=args.update_num)
+
+            for data in model.iter_result(skip_bg=True, mid_signal_cutoff=args.mid_signal_cutoff):
+                if min(data[0], data[1]) < dataset.cell_radius:
+                    continue
+                if min((model.cos_simi_range[0] - data[0]), (model.cos_simi_range[1] - data[1])) <= dataset.cell_radius:
+                    continue
+                data[0] = data[0] + x_start - dataset.cell_radius
+                data[1] = data[1] + y_start - dataset.cell_radius
+                f.write("\t".join(list(map(str, data)))+"\n")
+            model.detach()
+            tmp_spot_data.detach()
+            tmp_total_UMI_arr.detach()
+            if tr.cuda.is_available():
+                tr.cuda.empty_cache()
+
 def enhance_main(args):
     with tr.no_grad():
         device = args.device_name
@@ -50,69 +148,24 @@ def enhance_main(args):
         spot_data, total_UMI_arr, x_range, y_range = load_spot_data(
             args.spot, args.x_index_label, args.y_index_label, args.gene_name_label, args.UMI_label, args.max_expr_ratio, dataset
         )
-
         if args.mid_signal_cutoff is None:
             logging.info("Computing global coverage threshold ...")
             args.mid_signal_cutoff = get_ave_smooth_cov(total_UMI_arr)
             logging.info(f"The global coverage threshold is {args.mid_signal_cutoff}")
+        enhance_worker(args, dataset, spot_data, total_UMI_arr, x_range, y_range, device)
 
-        is_empty = False
-        if args.slice_x is not None:
-            assert args.slice_y
-            _, x_min, y_min, _ = tr.min(spot_data.indices(), 1)[0].numpy()
-            if (x_range <= args.slice_x[0]) | (y_range <= args.slice_y[0]) | (x_min >= args.slice_x[1]) | (y_min >= args.slice_y[1]):
-                is_empty = True
-            else:
-                args.slice_x[1] = min(args.slice_x[1], x_range)
-                args.slice_y[1] = min(args.slice_y[1], y_range)
-                if min((args.slice_x[1] - args.slice_x[0]), (args.slice_y[1] - args.slice_y[0])) < (4 * dataset.max_bin_size):
-                    raise ValueError("Slice region is too small")
-                spot_data = SparseTenserSlice2D(spot_data, args.slice_x[0], args.slice_x[1], args.slice_y[0], args.slice_y[1])
-                total_UMI_arr =  total_UMI_arr[:, args.slice_x[0]: args.slice_x[1], args.slice_y[0]: args.slice_y[1], :]
-                x0 = args.slice_x[0]
-                y0 = args.slice_y[0]
-        else:
-            x0 = 0
-            y0 = 0
+def enhance_CODEX_main(args):
+    with tr.no_grad():
+        device = args.device_name
+        if device is None:
+            device = select_device()
 
-        if tr.sparse.sum(spot_data) == 0:
-            is_empty = True
-        
-        if is_empty:
-            with open(args.output, "w") as f:
-                header = ["x", "y", "EmbeddingState", "Embedding1", "Embedding2", "Embedding3", "LabelTransfer", "ArgMaxCellType", "RefCellTypeScore", "OtherCellTypeScore", "BackgroundScore"]
-                f.write("\t".join(header)+"\n")
-            return None
-
-        if args.ave_bin_dist_cutoff is None:
-            args.ave_bin_dist_cutoff = max(2, int(10 / dataset.embedding_resolution))
-
-        expand_size = int((dataset.max_bin_size - 1) / 2) + dataset.cell_radius
-        with open(args.output, "w") as f:
-            header = ["x", "y", "EmbeddingState", "Embedding1", "Embedding2", "Embedding3", "LabelTransfer", "ArgMaxCellType", "RefCellTypeScore", "OtherCellTypeScore", "BackgroundScore"]
-            f.write("\t".join(header)+"\n")
-            for tmp_spot_data, tmp_total_UMI_arr, x_start, y_start in div_spot(spot_data, total_UMI_arr, expand_size, step=args.window_size):
-                tmp_spot_data = tmp_spot_data.to(device)
-                tmp_total_UMI_arr = tmp_total_UMI_arr.to(device)
-                x_start = x_start + x0
-                y_start = y_start + y0
-                x_end = min(x_start+args.window_size-1, x_range-1)
-                y_end = min(y_start+args.window_size-1, y_range-1)
-                logging.info(f"Spot region: x: {x_start}-{x_end}, y: {y_start}-{y_end}")
-                model = RedeVizBinModel(dataset, tmp_spot_data, tmp_total_UMI_arr)
-                model.compute_all(mid_signal_cutoff=args.mid_signal_cutoff, neighbor_close_label_fct=args.neighbor_close_label_fct, signal_cov_score_fct=args.signal_cov_score_fct, is_in_ref_score_fct=args.is_in_ref_score_fct, argmax_prob_score_fct=args.argmax_prob_score_fct, ave_bin_dist_cutoff=args.ave_bin_dist_cutoff, embedding_expand_size=3, batch_effect_fct=args.batch_effect_fct, update_num=args.update_num)
-
-                for data in model.iter_result(skip_bg=True, mid_signal_cutoff=args.mid_signal_cutoff):
-                    if min(data[0], data[1]) < dataset.cell_radius:
-                        continue
-                    if min((model.cos_simi_range[0] - data[0]), (model.cos_simi_range[1] - data[1])) <= dataset.cell_radius:
-                        continue
-                    data[0] = data[0] + x_start - dataset.cell_radius
-                    data[1] = data[1] + y_start - dataset.cell_radius
-                    f.write("\t".join(list(map(str, data)))+"\n")
-                model.detach()
-                tmp_spot_data.detach()
-                tmp_total_UMI_arr.detach()
-                if tr.cuda.is_available():
-                    tr.cuda.empty_cache()
+        logging.info("Loding index and CODEX data ...")
+        cell_radius = 11
+        dataset = RedeVizBinIndex(args.index, cell_radius, device)
+        spot_data, total_UMI_arr, x_range, y_range = load_CODEX_data(args.image, dataset)
+        if args.mid_signal_cutoff is None:
+            args.mid_signal_cutoff = 4
+        logging.info(f"The global coverage threshold is {args.mid_signal_cutoff}")
+        enhance_worker(args, dataset, spot_data, total_UMI_arr, x_range, y_range, device)
 

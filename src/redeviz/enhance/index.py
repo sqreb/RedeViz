@@ -138,6 +138,7 @@ def compute_simu_info_worker(pct_arr, norm_method, UMI_per_bin, rand_pct_arr, ma
         simu_cnt_arr = tr.log(1 + 1e3 * simu_cnt_arr / (tr.sum(simu_cnt_arr, -1, keepdim=True) + 1e-9))
     norm_simu_cnt_arr = simu_cnt_arr / tr.sqrt(tr.sum(simu_cnt_arr**2, -1, keepdim=True))
     cos_simi = tr.matmul(norm_simu_cnt_arr, t_norm_gene_bin_cnt)
+    cos_simi = tr.nan_to_num(cos_simi, nan=0)
     max_cos_simi = tr.unsqueeze(tr.max(cos_simi, 1)[0], -1)
     sort_max_cos_simi, _ = tr.sort(tr.reshape(max_cos_simi, [-1]))
     quantile_cos_simi = tr.quantile(sort_max_cos_simi, quantile_arr, 0)
