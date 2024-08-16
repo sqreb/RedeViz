@@ -58,7 +58,13 @@ Download `Eye_simple.h5ad` from https://figshare.com/account/projects/169788/art
 
 `RedeViz posttreatment plot_gene_expr -R ST_imputation/KRT12.imputate.npz -G ST_imputation/KRT19.imputate.npz -B ST_imputation/CD74.imputate.npz -o ST_imputation/KRT12_KRT19_CD74.png`
 
-## Differentiation SISVA
+## Differentiation RedeViz
 `RedeViz posttreatment compare --input1 ST.augment.ref1.tsv --input2 ST.augment.ref2.tsv --output ST.ref1.ref2.compare.tsv`
 
 Note: Requires in-situ augmentation of the same ST data using different reference data in advance
+
+## About
+The codes of RedeViz and SpatialSimulator are both implemented in Python pacakge and stored in https://github.com/sqreb/RedeViz. The benchmarking and analysis codes are provided at https://github.com/sqreb/RedeVizMs.
+
+## Citation
+Wang, D. & Ren, X. Visual analysis of spatial transcriptomics data with RedeViz. Preprint at https://doi.org/10.1101/2024.07.09.602652 (2024).
