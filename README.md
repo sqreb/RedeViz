@@ -20,7 +20,7 @@ Install Pytorch with cuda version (https://pytorch.org/get-started/locally)
 ## Download reference scRNA-seq data
 `cd demo`
 
-Download `Eye_simple.h5ad` from https://figshare.com/account/projects/169788/articles/23506638.
+Download `ST_simulator.data.tar.gz` from FigShare database (DOI: 10.6084/m9.figshare.24408082), unzip it, and rename it to "data".
 
 ## Extract phenotypic information from scRNA-seq
 `RedeViz enhance pretreat -i Eye_simple.h5ad --cell-type-label free_annotation --gene-id-label gene_symbol --embedding UMAP --embedding-dim 3 --min-cell-num 2 -o emb_info`
@@ -67,4 +67,8 @@ Note: Requires in-situ augmentation of the same ST data using different referenc
 The codes of RedeViz and SpatialSimulator are both implemented in Python pacakge and stored in https://github.com/sqreb/RedeViz. The benchmarking and analysis codes are provided at https://github.com/sqreb/RedeVizMs.
 
 ## Citation
-Wang, D. & Ren, X. Visual analysis of spatial transcriptomics data with RedeViz. Preprint at https://doi.org/10.1101/2024.07.09.602652 (2024).
+Wang, D. & Ren, X. Visual analysis of spatial transcriptomics data with RedeViz. Preprint at https://doi.org/10.1101/2024.07.09.602652
+        
+        
+        
+         (2024).
