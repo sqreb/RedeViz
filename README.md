@@ -68,11 +68,17 @@ The codes of RedeViz and SpatialSimulator are both implemented in Python pacakge
 
 ## Tutorials
 MERFISH: https://github.com/sqreb/RedeVizMs/blob/master/Mouse_Ileum_MERFISH/RedeVizNgs.smk
+
 Xenium: https://github.com/sqreb/RedeVizMs/blob/master/BreastCancer_Xenium/Enhance.smk
+
 Visium HD: https://github.com/sqreb/RedeVizMs/blob/master/Mouse_Kidney_VisiumHD/Visium_HD.smk
+
 Stereo-seq: https://github.com/sqreb/RedeVizMs/blob/master/Mouse_Embo_Stereo_seq/Enhance.smk
+
 CODEX: https://github.com/sqreb/RedeVizMs/blob/master/CODEX/Snakefile
+
 CosMx: https://github.com/sqreb/RedeVizMs/blob/master/HumanNSCLC_CoxMx/Snakefile
+
 Targeted-enhancement: https://github.com/sqreb/RedeVizMs/blob/master/Mouse_Embo_Stereo_seq/OrganSelfEnhance.smk
 
 ## Citation
