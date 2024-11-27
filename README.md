@@ -66,9 +66,14 @@ Note: Requires in-situ augmentation of the same ST data using different referenc
 ## About
 The codes of RedeViz and SpatialSimulator are both implemented in Python pacakge and stored in https://github.com/sqreb/RedeViz. The benchmarking and analysis codes are provided at https://github.com/sqreb/RedeVizMs.
 
+## Tutorials
+MERFISH: https://github.com/sqreb/RedeVizMs/blob/master/Mouse_Ileum_MERFISH/RedeVizNgs.smk
+Xenium: https://github.com/sqreb/RedeVizMs/blob/master/BreastCancer_Xenium/Enhance.smk
+Visium HD: https://github.com/sqreb/RedeVizMs/blob/master/Mouse_Kidney_VisiumHD/Visium_HD.smk
+Stereo-seq: https://github.com/sqreb/RedeVizMs/blob/master/Mouse_Embo_Stereo_seq/Enhance.smk
+CODEX: https://github.com/sqreb/RedeVizMs/blob/master/CODEX/Snakefile
+CosMx: https://github.com/sqreb/RedeVizMs/blob/master/HumanNSCLC_CoxMx/Snakefile
+Targeted-enhancement: https://github.com/sqreb/RedeVizMs/blob/master/Mouse_Embo_Stereo_seq/OrganSelfEnhance.smk
+
 ## Citation
-Wang, D. & Ren, X. Visual analysis of spatial transcriptomics data with RedeViz. Preprint at https://doi.org/10.1101/2024.07.09.602652
-        
-        
-        
-         (2024).
+Wang, D. & Ren, X. Visual analysis of spatial transcriptomics data with RedeViz. Preprint at https://doi.org/10.1101/2024.07.09.602652 (2024).
